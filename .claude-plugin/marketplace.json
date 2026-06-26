@@ -10,9 +10,9 @@
   },
   "plugins": [
     {
-      "name": "pyor-local-review",
-      "source": "./plugins/pyor-local-review",
-      "description": "Open the current branch's working changes as a Pyor local pre-PR review."
+      "name": "pyor",
+      "source": "./plugins/pyor",
+      "description": "Open the current branch's working changes as a Pyor local pre-PR review (/pyor:local-review)."
     }
   ]
 }

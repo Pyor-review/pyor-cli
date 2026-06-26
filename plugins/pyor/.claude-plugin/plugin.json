@@ -1,6 +1,6 @@
 {
-  "name": "pyor-local-review",
-  "description": "Open the current branch's working changes as a Pyor local pre-PR review.",
+  "name": "pyor",
+  "description": "Pyor for Claude Code. /pyor:local-review opens your working changes as a local pre-PR review.",
   "version": "0.1.0",
   "author": {
     "name": "Pyor",

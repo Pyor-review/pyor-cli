@@ -5,9 +5,9 @@ code review.
 
 ## Plugins
 
-### `pyor-local-review`
+### `pyor`
 
-Adds the **`/pyor-local-review`** command. Run it from a coding session in any
+Adds the **`/pyor:local-review`** command. Run it from a coding session in any
 git repository and your working changes open as a **local pre-PR review** in the
 Pyor desktop app, ready to read before a PR exists. Re-running reopens the same
 review (idempotent).
@@ -20,10 +20,10 @@ It resolves the repo root, current branch, and base branch, then fires a
 ```sh
 # In Claude Code:
 /plugin marketplace add Pyor-review/pyor-cli
-/plugin install pyor-local-review@pyor
+/plugin install pyor@pyor
 ```
 
-Then run `/pyor-local-review` from any repository.
+Then run `/pyor:local-review` from any repository.
 
 ## Requirements
 
@@ -37,6 +37,6 @@ The command is a thin wrapper around `scripts/pyor-local-review.mjs`, which is
 self-contained and repo-agnostic:
 
 ```sh
-node plugins/pyor-local-review/scripts/pyor-local-review.mjs --print     # print the deep link, do not open
-node plugins/pyor-local-review/scripts/pyor-local-review.mjs --selftest  # run the built-in assertions
+node plugins/pyor/scripts/pyor-local-review.mjs --print     # print the deep link, do not open
+node plugins/pyor/scripts/pyor-local-review.mjs --selftest  # run the built-in assertions
 ```
