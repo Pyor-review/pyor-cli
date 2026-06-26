@@ -1,0 +1,11 @@
+{
+  "name": "pyor-local-review",
+  "description": "Open the current branch's working changes as a Pyor local pre-PR review.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Pyor",
+    "url": "https://github.com/Pyor-review"
+  },
+  "homepage": "https://github.com/Pyor-review/pyor-cli",
+  "keywords": ["pyor", "code-review", "pull-request", "git"]
+}
