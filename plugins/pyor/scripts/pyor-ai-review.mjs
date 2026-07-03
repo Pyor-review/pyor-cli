@@ -18,6 +18,8 @@ import { randomUUID } from 'node:crypto';
 import { strict as assert } from 'node:assert';
 import {
   fs,
+  os,
+  path,
   resolveRepoHead,
   resolveBase,
   computeRevision,
@@ -79,14 +81,30 @@ function prepare(argv) {
 }
 
 function open(argv) {
-  const aids = flag(argv, 'aids');
+  const aidsIn = flag(argv, 'aids');
   const session = flag(argv, 'session');
   const repo = flag(argv, 'repo');
   const head = flag(argv, 'head');
   const base = flag(argv, 'base');
   const title = flag(argv, 'title');
-  if (!aids || !session || !repo || !head || !base) {
+  if (!aidsIn || !session || !repo || !head || !base) {
     out({ ok: false, error: 'open needs --aids --session --repo --head --base' });
+    process.exitCode = 1;
+    return;
+  }
+  // The app only reads aids from under os.tmpdir() (its deep-link read gate).
+  // Re-materialize the agent's file there ourselves so a temp path the agent
+  // chose elsewhere (e.g. a 0700 session scratchpad) doesn't silently fail to
+  // load. Parse first to fail loudly on malformed aids instead of in the app.
+  let aids;
+  try {
+    const raw = fs.readFileSync(aidsIn, 'utf8');
+    JSON.parse(raw);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pyor-aids-'));
+    aids = path.join(dir, 'aids.json');
+    fs.writeFileSync(aids, raw);
+  } catch (e) {
+    out({ ok: false, error: `Unreadable or invalid aids file: ${e.message}` });
     process.exitCode = 1;
     return;
   }
