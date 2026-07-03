@@ -82,11 +82,14 @@ revision token (which must match what the app computes so aids cache-hit), the
 `pyor://` deep link, and the `~/.pyor` feedback channel. The agent only supplies
 the analysis (grouping + hints).
 
-The skill runs the CLI straight from this repo with no install:
+Run it without installing:
 
 ```sh
-npx -y --package github:Pyor-review/pyor-cli pyor-review prepare
-npx -y --package github:Pyor-review/pyor-cli pyor-review --selftest
+npx -y pyor-review prepare
+npx -y pyor-review --selftest
+# or install it: npm install -g pyor-review
+# no-install fallback before it's on npm:
+#   npx -y --package github:Pyor-review/pyor-cli pyor-review prepare
 ```
 
 Subcommands: `prepare` (resolve repo/head/base + a deterministic session id +
