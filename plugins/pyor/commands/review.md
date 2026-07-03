@@ -47,7 +47,9 @@ Parse the JSON on stdout.
   Pyor once** so it writes its review context, and **re-run prepare** (loop until
   `contextPresent:true`). On **no**, stop.
 - If `ok:true` — keep `sessionId`, `repo`, `head`, `base`, `revision`,
-  `basePromptVersion`, `intent`, `customText`, and `context`.
+  `basePromptVersion`, `intent`, `customText`, and `context`. `sessionId` is
+  **stable per review** — re-running `prepare` for the same repo/head/base
+  returns the same id, so a `wait` you already parked stays valid.
 
 ## 2. Generate the aids (delegate to a fresh panel)
 
@@ -146,13 +148,25 @@ grouping + hints pre-loaded. They can read it, leave comments, and click
 
 ## 4. Wait for feedback (park)
 
+Run `wait` **as a background command** (`run_in_background: true`). It blocks
+until the user clicks **"Send to Claude"**, then exits with their comments — the
+task-completion notification wakes you the instant they send, so you can do other
+work meanwhile without babysitting a poll.
+
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" wait --session <sessionId>
 ```
 
 - `status:"received"` — present the returned `feedback` (its `commentsMarkdown`
   is reviewer notes to address) and act on them as the user directs.
-- `status:"pending"` — nothing sent yet. **Re-run the same `wait` command** to
-  keep parking. Repeat until received, or until the user tells you to stop.
+- `status:"pending"` — the ~30 min hold elapsed with nothing sent (safety valve).
+  If the user is still reviewing, **re-arm** another background `wait` on the same
+  `sessionId`. Comments are buffered server-side, so even if no `wait` was in
+  flight when they clicked, the next `wait` returns them immediately — if the user
+  says they sent comments and you didn't react, just run `wait` again.
+
+Because `sessionId` is stable per review (step 1), re-running `prepare` mid-flow
+(e.g. after fixing a launch issue) does **not** orphan a parked `wait` — it's the
+same session.
 
 Do not commit, push, or create a PR — this is a pre-PR read.

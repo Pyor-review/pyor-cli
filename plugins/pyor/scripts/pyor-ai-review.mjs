@@ -14,7 +14,6 @@
 // The agent orchestrates: prepare → (generate aids, write temp file) → open →
 // wait. See commands/ai-review.md.
 
-import { randomUUID } from 'node:crypto';
 import { strict as assert } from 'node:assert';
 import {
   fs,
@@ -23,6 +22,7 @@ import {
   resolveRepoHead,
   resolveBase,
   computeRevision,
+  computeSessionId,
   buildDeepLink,
   openUrl,
   readReviewContext,
@@ -68,7 +68,7 @@ function prepare(argv) {
   out({
     ok: true,
     contextPresent: true,
-    sessionId: randomUUID(),
+    sessionId: computeSessionId(repo, head, base),
     repo,
     head,
     base,
@@ -125,10 +125,14 @@ async function wait(argv) {
     process.exitCode = 1;
     return;
   }
-  // Bash tool calls cap at ~10 min, so a single wait parks up to ~8 min then
-  // reports PENDING; the agent re-invokes to keep parking (ADR 0032: zero extra
-  // commands for the user — the agent loops, not them).
-  const timeoutMs = Number(flag(argv, 'timeout') ?? 480) * 1000;
+  // Meant to run as a BACKGROUND command (see review.md step 4): it blocks until
+  // the user clicks "Send to Claude", then exits with the feedback — the
+  // harness's task-completion notification IS the push that wakes the agent, no
+  // babysitting. Holds ~30 min then returns PENDING as a safety valve for an
+  // abandoned review; the agent re-arms a fresh background wait on the SAME
+  // (now-stable) session. Comments stay buffered server-side, so a missed window
+  // is always recoverable by re-running wait.
+  const timeoutMs = Number(flag(argv, 'timeout') ?? 1800) * 1000;
   const file = inboxPath(session);
   const started = Date.now();
   for (;;) {
@@ -163,6 +167,12 @@ function selftest() {
   // computeRevision against this very repo returns "<sha>:<tree>".
   const rev = computeRevision(process.cwd());
   assert.match(rev, /^[0-9a-f]{7,40}(:[0-9a-f]{7,40})?$/i);
+  // Session id: stable per review (so a re-prepare keeps a parked wait valid),
+  // varies by review, and matches the app's strict 8-4-4-4-12 deep-link parser.
+  const s = computeSessionId('/r', 'b/x', 'main');
+  assert.equal(s, computeSessionId('/r', 'b/x', 'main'));
+  assert.notEqual(s, computeSessionId('/r', 'b/y', 'main'));
+  assert.match(s, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   process.stdout.write('selftest ok\n');
 }
 
