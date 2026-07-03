@@ -1,19 +1,23 @@
 ---
-description: Author an AI review (grouping + inline hints) of the current branch and open it in Pyor
-allowed-tools: Bash(node:*), Bash(git:*), Bash(curl:*), Bash(mktemp:*), Write, Read
+description: Author an AI review of the current branch via a fresh sub-agent panel, and open it in Pyor
+allowed-tools: Task, Bash(node:*), Bash(git:*), Bash(curl:*), Bash(mktemp:*), Write, Read
 ---
 
 Open the working changes of the current git repository as a **local pre-PR
-review** in the Pyor desktop app, **with AI review aids you author** — file
-grouping and inline hints — so the reviewer reads a pre-analyzed diff (ADR
-0032). You are the analysis engine: you already hold the diff, so you generate
-the aids and hand them to Pyor. No API key, no in-app model run.
+review** in the Pyor desktop app, with AI review aids — file grouping and inline
+hints — so the reviewer reads a pre-analyzed diff (ADR 0032). No API key, no
+in-app model run.
+
+**You do NOT author the review yourself.** You orchestrate a panel of **fresh
+sub-agents** that author it with **no context from this session** — they see
+only the diff, so the review isn't biased by whoever wrote the code (an author
+reviewing their own work shares its blind spots). Your job is to launch them,
+merge their output, and do the mechanical hand-off.
 
 Argument (optional): a grouping intent — `importance` (default), `walkthrough`,
 or `custom "<instruction>"`. Example: `/pyor:ai-review walkthrough`.
 
-Run the flow in order. Each step is mechanical except the generation, which is
-yours.
+Run the flow in order.
 
 ## 1. Prepare
 
@@ -32,51 +36,80 @@ Parse the JSON on stdout.
 - If `ok:true` — keep `sessionId`, `repo`, `head`, `base`, `revision`,
   `basePromptVersion`, `intent`, `customText`, and `context`.
 
-## 2. Generate the aids (this is your job)
+## 2. Generate the aids (delegate to a fresh panel)
 
-Gather the change: `git diff <base>...<head>` for committed changes plus
-`git diff <head>` and `git status --porcelain` for uncommitted ones. Read the
-changed files as needed for context.
+Launch the sub-agents below with the **Task tool**. A Task sub-agent gets a
+clean context window — it does NOT inherit this conversation. **Keep it that
+way:** each sub-agent prompt must contain ONLY the repo path, the relevant
+system prompt from `context`, the output schema, and the intent — never any of
+this session's reasoning, intent, or "why the code is written this way." Tell
+each sub-agent to **gather the diff itself** (`git diff <base>...<head>`, plus
+`git diff <head>` and `git status --porcelain` for uncommitted, reading changed
+files as needed) and return ONLY the JSON. Run the hint reviewers in parallel
+(one message, multiple Task calls).
 
-Use the prompts in `context` verbatim as your system guidance:
+Substitute the real values (`<base>`, `<head>`, `<repo>`, `context.*`) into each
+sub-agent's prompt before launching.
 
-- **Grouping** — use `context.grouping[intent]` (for `custom`, take
-  `context.grouping.customTemplate` and replace `__PYOR_CUSTOM_INSTRUCTION__`
-  with `customText`). Produce an object matching **exactly**:
-  ```
-  { "groups": [ { "name": str (2–4 words),
-                  "description": str (one sentence),
-                  "detail": str (3–5 sentences),
-                  "kind": "important" | "noise",
-                  "files": [str]  // exact paths from the diff
-                } ] }
-  ```
-  Every changed file must belong to exactly one group.
+### 2a. Hints — a 3-lens review panel
 
-- **Hints** — use `context.hintsSystem`. Produce an object matching **exactly**:
-  ```
-  { "hints": [ { "path": str,             // exact path from the diff
-                 "line": int,             // 1-based line in the NEW (head) file
-                 "type": "bug"|"security"|"risk"|"complexity"|"test-gap",
-                 "severity": "info"|"warn"|"high",
-                 "title": str, "body": str,
-                 "guideline": str | null } ] }
-  ```
-  Few and high-signal (≤ ~3 per file, ≤ ~12 total). Anchor each to a NEW-side
-  line that is INSIDE a changed hunk (an added/changed line, or context right
-  next to one) — the diff collapses unchanged regions, so a hint on an
-  out-of-hunk line is hidden and wasted. A wrong or out-of-hunk line drops the
-  hint.
+Launch **three** fresh reviewers. Each gets `context.hintsSystem` **verbatim as
+its system guidance** (it owns the schema, caps, taxonomy, in-hunk anchoring,
+and never-post rule) **plus** its one-line lens focus, and returns:
+```
+{ "hints": [ { "path": str,   // exact path from the diff
+               "line": int,    // 1-based line in the NEW (head) file, INSIDE a changed hunk
+               "type": "bug"|"security"|"risk"|"complexity"|"test-gap",
+               "severity": "info"|"warn"|"high",
+               "title": str, "body": str, "guideline": str | null } ] }
+```
 
-Write the hand-off to a temp file (use `mktemp`), shaped exactly:
+- **Correctness lens** — "Focus on correctness: logic errors, edge cases, state
+  and async bugs, error handling/propagation, and missing test coverage. Prefer
+  types bug / risk / test-gap."
+- **Simplicity lens** — "Focus on simplicity (the Ponytail lens): over-
+  engineering, reinvented stdlib/native features, dead flexibility, and code
+  that could be materially shorter. Prefer type complexity. Never flag input
+  validation, error handling that prevents data loss, security, a11y, or a lone
+  smoke test as over-engineering."
+- **Security lens** — "Focus on security: exploitable input handling, injection,
+  auth/authz gaps, secret exposure, and unsafe file/network/deserialization.
+  Prefer types security / risk."
+
+Anchor rule (state it to each): anchor every hint to a NEW-side line INSIDE a
+changed hunk — the diff collapses unchanged regions, so an out-of-hunk anchor is
+hidden and wasted.
+
+**Merge (mechanical, you do it — no code context needed):** concatenate the
+three hint arrays; **dedupe** — when two hints share the same `path` + `line` (or
+are clearly the same issue), keep one (highest severity, most specific body);
+then **cap to the contract**: at most **3 per file** and **12 total**, keeping
+highest severity first. That merged array is `hints`.
+
+### 2b. Grouping — one fresh agent
+
+Launch **one** fresh agent with `context.grouping[intent]` as its system guidance
+(for `custom`, take `context.grouping.customTemplate` and replace
+`__PYOR_CUSTOM_INSTRUCTION__` with `customText`). It returns:
+```
+{ "groups": [ { "name": str (2–4 words),
+                "description": str (one sentence),
+                "detail": str (3–5 sentences),
+                "kind": "important" | "noise",
+                "files": [str] } ] }   // exact diff paths; every changed file in exactly one group
+```
+
+### 2c. Assemble the hand-off
+
+Write it to a temp file (use `mktemp`), shaped exactly:
 ```json
 {
   "basePromptVersion": <basePromptVersion from prepare>,
   "revision": "<revision from prepare>",
   "intent": "<intent>",
   "customText": "<customText or omit>",
-  "grouping": { ...your grouping object... },
-  "hints": { ...your hints object... }
+  "grouping": { ...the grouping agent's object... },
+  "hints": { "hints": [ ...the merged, deduped, capped hints... ] }
 }
 ```
 
