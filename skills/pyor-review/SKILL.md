@@ -20,12 +20,14 @@ hand it to Pyor; Pyor renders it through its normal review UI.
 
 Every step calls the `pyor-review` CLI, which does the deterministic parts (git
 resolution, the working-tree revision token that must match the app, the deep
-link, the feedback inbox). If it is not on your PATH, run it straight from the
-repo with `npx` — no install:
+link, the feedback inbox). Run it without installing:
 
 ```bash
-npx -y --package github:Pyor-review/pyor-cli pyor-review <args>
+npx -y pyor-review <args>
 ```
+
+(Not yet on npm? Run it straight from the repo instead:
+`npx -y --package github:Pyor-review/pyor-cli pyor-review <args>`.)
 
 Below, `pyor-review` is shorthand for that command. Only `git` and `node` are
 required on the PATH.
@@ -42,7 +44,7 @@ If the argument is `plain` or `fast`, skip the AI flow — open a plain review a
 stop:
 
 ```bash
-npx -y --package github:Pyor-review/pyor-cli pyor-local-review
+npx -y --package pyor-review pyor-local-review
 ```
 
 Tell the user the review is opening (head vs base, as printed), then stop.

@@ -14,6 +14,10 @@
   "engines": {
     "node": ">=18"
   },
+  "scripts": {
+    "test": "node plugins/pyor/scripts/pyor-ai-review.mjs --selftest && node plugins/pyor/scripts/pyor-local-review.mjs --selftest",
+    "prepublishOnly": "npm test"
+  },
   "keywords": [
     "pyor",
     "code-review",
@@ -21,10 +25,20 @@
     "git",
     "agent-skills"
   ],
+  "author": {
+    "name": "Pyor",
+    "url": "https://github.com/Pyor-review"
+  },
   "homepage": "https://pyor.review",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Pyor-review/pyor-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Pyor-review/pyor-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT"
 }
