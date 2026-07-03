@@ -4,6 +4,7 @@
 // and /pyor:ai-review can't drift on the URL or token contracts.
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -112,6 +113,16 @@ export function pyorDir() {
 
 export function reviewContextPath() {
   return path.join(pyorDir(), 'review-context.json');
+}
+
+/** The session nonce that keys the Send-to-Claude round-trip (ADR 0032).
+ * DETERMINISTIC per review `(repo, head, base)` so re-running `prepare` returns
+ * the SAME id — a parked `wait` stays valid across a re-prepare instead of being
+ * orphaned on a dead session. Shaped as a canonical 8-4-4-4-12 uuid (the app's
+ * deep-link parser requires exactly that; it doesn't check RFC version bits). */
+export function computeSessionId(repo, head, base) {
+  const h = createHash('sha256').update(`${repo}\0${head}\0${base}`).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
 export function inboxPath(sessionId) {
