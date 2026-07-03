@@ -1,0 +1,30 @@
+{
+  "name": "pyor-review",
+  "version": "0.4.0",
+  "description": "Open your working git changes as an AI-reviewed local pre-PR review in the Pyor desktop app. Works with any coding agent.",
+  "type": "module",
+  "bin": {
+    "pyor-review": "plugins/pyor/scripts/pyor-ai-review.mjs",
+    "pyor-local-review": "plugins/pyor/scripts/pyor-local-review.mjs"
+  },
+  "files": [
+    "plugins/pyor/scripts",
+    "skills"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "pyor",
+    "code-review",
+    "pull-request",
+    "git",
+    "agent-skills"
+  ],
+  "homepage": "https://pyor.review",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pyor-review/pyor-cli.git"
+  },
+  "license": "MIT"
+}
