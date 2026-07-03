@@ -80,11 +80,13 @@ export function computeRevision(repo) {
 }
 
 /** Build the `pyor://local-review` deep link. Extends ADR 0030 with the ADR
- * 0032 aids + session params. Pure; URLSearchParams encodes paths/branches. */
-export function buildDeepLink({ path: repoPath, worktree, head, base, aids, session }) {
+ * 0032 aids + session + title params. Pure; URLSearchParams encodes
+ * paths/branches. */
+export function buildDeepLink({ path: repoPath, worktree, head, base, aids, session, title }) {
   const q = new URLSearchParams({ path: repoPath, worktree: worktree ?? repoPath, head, base });
   if (aids) q.set('aids', aids);
   if (session) q.set('session', session);
+  if (title) q.set('title', title);
   return `pyor://local-review?${q.toString()}`;
 }
 

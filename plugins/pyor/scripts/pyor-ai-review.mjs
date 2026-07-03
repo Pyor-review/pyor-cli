@@ -84,12 +84,13 @@ function open(argv) {
   const repo = flag(argv, 'repo');
   const head = flag(argv, 'head');
   const base = flag(argv, 'base');
+  const title = flag(argv, 'title');
   if (!aids || !session || !repo || !head || !base) {
     out({ ok: false, error: 'open needs --aids --session --repo --head --base' });
     process.exitCode = 1;
     return;
   }
-  const url = buildDeepLink({ path: repo, head, base, aids, session });
+  const url = buildDeepLink({ path: repo, head, base, aids, session, title });
   try {
     openUrl(url);
     out({ ok: true, url });

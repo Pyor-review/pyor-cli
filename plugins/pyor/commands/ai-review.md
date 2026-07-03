@@ -62,8 +62,11 @@ Use the prompts in `context` verbatim as your system guidance:
                  "title": str, "body": str,
                  "guideline": str | null } ] }
   ```
-  Few and high-signal (≤ ~3 per file, ≤ ~12 total). Anchor each to a real
-  changed NEW-side line — a wrong line number drops the hint.
+  Few and high-signal (≤ ~3 per file, ≤ ~12 total). Anchor each to a NEW-side
+  line that is INSIDE a changed hunk (an added/changed line, or context right
+  next to one) — the diff collapses unchanged regions, so a hint on an
+  out-of-hunk line is hidden and wasted. A wrong or out-of-hunk line drops the
+  hint.
 
 Write the hand-off to a temp file (use `mktemp`), shaped exactly:
 ```json
@@ -79,10 +82,16 @@ Write the hand-off to a temp file (use `mktemp`), shaped exactly:
 
 ## 3. Open in Pyor
 
+Give the review a short human **title** (≤ ~8 words) describing what this
+session is about — its topic/goal, not the branch name (e.g. "Session-authored
+review aids" or "Fix promo-code expiry"). Pass it as `--title`; Pyor shows it
+instead of the raw branch slug.
+
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" open \
   --aids <tempfile> --session <sessionId> \
-  --repo <repo> --head <head> --base <base>
+  --repo <repo> --head <head> --base <base> \
+  --title "<short session title>"
 ```
 
 Then tell the user: the review is opening in Pyor (head vs base) with your
