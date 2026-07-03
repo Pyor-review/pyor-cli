@@ -1,7 +1,7 @@
 # pyor-cli
 
-Claude Code tooling for [Pyor](https://pyor.review), the native home for GitHub
-code review.
+Agent tooling for [Pyor](https://pyor.review), the native home for GitHub code
+review. Works with **Claude Code, Codex, Cursor, and any coding agent.**
 
 <p align="center">
   <img src="assets/pyor-review.png" alt="A Pyor local pre-PR review: changes grouped by AI into labelled folders, with an inline hint pointing at a risk, and a Send to Claude button." width="900">
@@ -47,13 +47,23 @@ PR exists; re-running reopens the same review (idempotent).
 
 ## Install
 
+**Claude Code** — install the plugin:
+
 ```sh
-# In Claude Code:
 /plugin marketplace add Pyor-review/pyor-cli
 /plugin install pyor@pyor
 ```
 
-Then run `/pyor:review` from any repository.
+**Any other agent** (Codex, Cursor, Amp, Gemini CLI, Windsurf, Zed, …) — install
+the skill with [`skills`](https://github.com/vercel-labs/skills), which mirrors
+it into your agent's format:
+
+```sh
+npx skills add Pyor-review/pyor-cli
+```
+
+Either way, then run `/pyor:review` (or invoke the `pyor-review` skill) from any
+repository. Both drive the same [`pyor-review`](#the-pyor-review-cli) flow.
 
 ## Requirements
 
@@ -64,15 +74,33 @@ Then run `/pyor:review` from any repository.
 - `git` and `node` on your PATH.
 - `gh` (the GitHub CLI) is optional, used only when a command needs GitHub data.
 
+## The `pyor-review` CLI
+
+Both the Claude plugin and the cross-agent skill drive one small, agent-neutral
+CLI that does the deterministic parts — git resolution, the working-tree
+revision token (which must match what the app computes so aids cache-hit), the
+`pyor://` deep link, and the `~/.pyor` feedback channel. The agent only supplies
+the analysis (grouping + hints).
+
+The skill runs the CLI straight from this repo with no install:
+
+```sh
+npx -y --package github:Pyor-review/pyor-cli pyor-review prepare
+npx -y --package github:Pyor-review/pyor-cli pyor-review --selftest
+```
+
+Subcommands: `prepare` (resolve repo/head/base + a deterministic session id +
+revision + the exported review context), `open` (fire the deep link with the
+aids), `wait` (park for "Send to Claude" feedback). `pyor-local-review` is the
+plain, no-AI open.
+
 ## Development
 
-The commands wrap two self-contained, repo-agnostic scripts sharing
-`scripts/lib.mjs` (git resolution, the deep-link builder, the working-tree
-revision token, and the `~/.pyor` channel paths):
+The scripts are self-contained and repo-agnostic, sharing
+`plugins/pyor/scripts/lib.mjs`:
 
 ```sh
 node plugins/pyor/scripts/pyor-local-review.mjs --print     # print the deep link, do not open
-node plugins/pyor/scripts/pyor-local-review.mjs --selftest  # run the built-in assertions
 node plugins/pyor/scripts/pyor-ai-review.mjs prepare        # resolve repo/head/base + revision + context
-node plugins/pyor/scripts/pyor-ai-review.mjs --selftest     # run the built-in assertions
+node plugins/pyor/scripts/pyor-ai-review.mjs --selftest     # run the built-in assertions (incl. session-id determinism)
 ```
