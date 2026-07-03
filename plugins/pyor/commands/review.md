@@ -1,12 +1,12 @@
 ---
-description: Author an AI review of the current branch via a fresh sub-agent panel, and open it in Pyor
+description: Open the current branch's changes as an AI-reviewed local pre-PR review in Pyor (add `plain` to skip AI)
 allowed-tools: Task, Bash(node:*), Bash(git:*), Bash(curl:*), Bash(mktemp:*), Write, Read
 ---
 
-Open the working changes of the current git repository as a **local pre-PR
-review** in the Pyor desktop app, with AI review aids — file grouping and inline
-hints — so the reviewer reads a pre-analyzed diff (ADR 0032). No API key, no
-in-app model run.
+The primary way to open the working changes of the current git repository as a
+**local pre-PR review** in the Pyor desktop app. **By default it authors an AI
+review** — file grouping + inline hints — so the reviewer reads a pre-analyzed
+diff (ADR 0032). No API key, no in-app model run.
 
 **You do NOT author the review yourself.** You orchestrate a panel of **fresh
 sub-agents** that author it with **no context from this session** — they see
@@ -14,10 +14,23 @@ only the diff, so the review isn't biased by whoever wrote the code (an author
 reviewing their own work shares its blind spots). Your job is to launch them,
 merge their output, and do the mechanical hand-off.
 
-Argument (optional): a grouping intent — `importance` (default), `walkthrough`,
-or `custom "<instruction>"`. Example: `/pyor:ai-review walkthrough`.
+Arguments (optional):
+- A grouping intent — `importance` (default), `walkthrough`, or
+  `custom "<instruction>"`. Example: `/pyor:review walkthrough`.
+- **`plain`** (or `fast`) — skip the AI panel and just open the diff for a quick
+  read. Equivalent to `/pyor:local-review`.
 
-Run the flow in order.
+## 0. Plain opt-out
+
+If the argument is `plain` or `fast`, do NOT run the panel — just open a plain
+review and stop:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-local-review.mjs"
+```
+
+Tell the user the review is opening in Pyor (head vs base, as printed) with no
+AI review, then stop. Otherwise, run the AI flow below in order.
 
 ## 1. Prepare
 

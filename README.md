@@ -11,20 +11,22 @@ Adds two commands. Both open your working changes as a **local pre-PR review**
 in the Pyor desktop app, ready to read before a PR exists; re-running reopens the
 same review (idempotent).
 
-- **`/pyor:local-review`** — open the working changes for a plain read. Resolves
-  the repo root, current branch, and base branch, then fires a
-  `pyor://local-review` deep link the Pyor desktop app handles.
-
-- **`/pyor:ai-review`** — the same, but a **panel of fresh sub-agents authors
-  the review first**: file grouping and inline hints, generated from the diff
-  (no API key, no in-app model run) and handed to Pyor to render. The reviewers
-  run with **no context from the calling session** — they see only the code, so
-  the review isn't biased by whoever wrote it — across three lenses
+- **`/pyor:review`** — the primary command. **Authors an AI review by default**:
+  a **panel of fresh sub-agents** produces file grouping + inline hints from the
+  diff (no API key, no in-app model run) and hands them to Pyor to render. The
+  reviewers run with **no context from the calling session** — they see only the
+  code, so the review isn't biased by whoever wrote it — across three lenses
   (correctness, simplicity, security). Takes an optional grouping intent:
   `importance` (default), `walkthrough`, or `custom "<instruction>"`. After you
   review and comment in Pyor, click **"Send to Claude"** to send the comments
   straight back into the session that opened it. Requires Pyor to have run at
-  least once (it exports the review context the command generates against).
+  least once (it exports the review context the command generates against). Add
+  **`plain`** (or `fast`) to skip the AI and just open the diff.
+
+- **`/pyor:local-review`** — a plain, fast open with **no AI** (equivalent to
+  `/pyor:review plain`). Resolves the repo root, current branch, and base
+  branch, then fires a `pyor://local-review` deep link the Pyor desktop app
+  handles.
 
 ## Install
 
@@ -34,7 +36,7 @@ same review (idempotent).
 /plugin install pyor@pyor
 ```
 
-Then run `/pyor:local-review` or `/pyor:ai-review` from any repository.
+Then run `/pyor:review` (or `/pyor:local-review` for a plain open) from any repository.
 
 ## Requirements
 
