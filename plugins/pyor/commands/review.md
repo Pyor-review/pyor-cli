@@ -48,6 +48,11 @@ Parse the JSON on stdout.
   `contextPresent:true`). On **no**, stop.
 - If `ok:true` — keep `sessionId`, `repo`, `head`, `base`, `revision`,
   `basePromptVersion`, `intent`, `customText`, and `context`.
+- If `pendingFeedback` is a non-empty array — these are comments from a
+  **previous** review on this branch whose session had already ended when the
+  user clicked "Send to Claude" (so they were never delivered). Present each
+  bundle's `commentsMarkdown` to the user as prior feedback to address, then
+  continue with the new review below.
 
 ## 2. Generate the aids (delegate to a fresh panel)
 

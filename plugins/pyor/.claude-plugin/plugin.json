@@ -1,7 +1,7 @@
 {
   "name": "pyor",
   "description": "Pyor for Claude Code. /pyor:review opens your working changes as an AI-reviewed local pre-PR review (a fresh sub-agent panel authors grouping + hints, with a Send-to-Claude feedback loop); add `plain` or use /pyor:local-review to skip the AI.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "Pyor",
     "url": "https://github.com/Pyor-review"

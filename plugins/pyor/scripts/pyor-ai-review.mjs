@@ -28,6 +28,7 @@ import {
   readReviewContext,
   reviewContextPath,
   inboxPath,
+  drainInboxForRepo,
 } from './lib.mjs';
 
 const INSTALL_CMD = 'curl -fsSL https://pyor.review/install.sh | sh';
@@ -76,6 +77,9 @@ function prepare(argv) {
     basePromptVersion: context.basePromptVersion,
     intent,
     customText: flag(argv, 'custom'),
+    // Feedback from a prior review on this branch whose session ended before it
+    // was sent (orphaned inbox bundles) — the agent surfaces these on reopen.
+    pendingFeedback: drainInboxForRepo(repo, head),
     context,
   });
 }
@@ -163,6 +167,23 @@ function selftest() {
   // computeRevision against this very repo returns "<sha>:<tree>".
   const rev = computeRevision(process.cwd());
   assert.match(rev, /^[0-9a-f]{7,40}(:[0-9a-f]{7,40})?$/i);
+
+  // drainInboxForRepo claims only matching repo+branch bundles, deletes only
+  // those, and returns them newest-first. Runs against a throwaway dir so it
+  // never touches the real ~/.pyor/inbox.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pyor-inbox-'));
+  const mk = (id, p) => fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(p));
+  mk('a', { repoRoot: '/r', branch: 'feat', sentAt: '2026-01-01', commentsMarkdown: 'A' });
+  mk('b', { repoRoot: '/r', branch: 'other', sentAt: '2026-01-02', commentsMarkdown: 'B' });
+  mk('c', { repoRoot: '/other', branch: 'feat', sentAt: '2026-01-03', commentsMarkdown: 'C' });
+  const drained = drainInboxForRepo('/r', 'feat', dir);
+  assert.equal(drained.length, 1);
+  assert.equal(drained[0].commentsMarkdown, 'A');
+  assert.equal(fs.existsSync(path.join(dir, 'a.json')), false); // consumed
+  assert.equal(fs.existsSync(path.join(dir, 'b.json')), true); // wrong branch, left
+  assert.equal(fs.existsSync(path.join(dir, 'c.json')), true); // wrong repo, left
+  fs.rmSync(dir, { recursive: true, force: true });
+
   process.stdout.write('selftest ok\n');
 }
 

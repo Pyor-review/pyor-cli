@@ -114,8 +114,43 @@ export function reviewContextPath() {
   return path.join(pyorDir(), 'review-context.json');
 }
 
+export function inboxDir() {
+  return path.join(pyorDir(), 'inbox');
+}
+
 export function inboxPath(sessionId) {
-  return path.join(pyorDir(), 'inbox', `${sessionId}.json`);
+  return path.join(inboxDir(), `${sessionId}.json`);
+}
+
+/** Adopt orphaned "Send to Claude" bundles for this repo+branch (ADR 0032).
+ * When the original /pyor:review session already ended, its parked `wait` is
+ * gone; a fresh run mints a new session nonce, so the app's inbox file would
+ * strand forever. On reopen we claim any bundle whose payload matches this
+ * repo root + branch, delete it (consume-once), and return them newest-first
+ * so the agent can surface the prior review's comments. */
+export function drainInboxForRepo(repoRoot, branch, dir = inboxDir()) {
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const found = [];
+  names
+    .filter((n) => n.endsWith('.json'))
+    .forEach((n) => {
+      const file = path.join(dir, n);
+      try {
+        const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (payload.repoRoot === repoRoot && payload.branch === branch) {
+          found.push(payload);
+          fs.rmSync(file, { force: true });
+        }
+      } catch {
+        // skip foreign / unreadable files
+      }
+    });
+  return found.sort((a, b) => String(b.sentAt ?? '').localeCompare(String(a.sentAt ?? '')));
 }
 
 /** Read + parse ~/.pyor/review-context.json, or null if absent/unreadable.
