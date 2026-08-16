@@ -17,7 +17,6 @@
 import { strict as assert } from 'node:assert';
 import {
   fs,
-  os,
   path,
   resolveRepoHead,
   resolveBase,
@@ -28,6 +27,7 @@ import {
   readReviewContext,
   reviewContextPath,
   inboxPath,
+  aidsPath,
 } from './lib.mjs';
 
 const INSTALL_CMD = 'curl -fsSL https://pyor.review/install.sh | sh';
@@ -92,16 +92,18 @@ function open(argv) {
     process.exitCode = 1;
     return;
   }
-  // The app only reads aids from under os.tmpdir() (its deep-link read gate).
-  // Re-materialize the agent's file there ourselves so a temp path the agent
-  // chose elsewhere (e.g. a 0700 session scratchpad) doesn't silently fail to
-  // load. Parse first to fail loudly on malformed aids instead of in the app.
+  // Re-materialize the agent's aids under ~/.pyor (the app's read gate trusts
+  // that dir). Do NOT stage in os.tmpdir(): a coding harness that sandboxes
+  // TMPDIR gives this CLI a different os.tmpdir() than the app's, so the app
+  // silently rejects the file and the review opens with no grouping/hints.
+  // ~/.pyor is home-derived, so both sides agree. Parse first to fail loudly on
+  // malformed aids instead of in the app.
   let aids;
   try {
     const raw = fs.readFileSync(aidsIn, 'utf8');
     JSON.parse(raw);
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pyor-aids-'));
-    aids = path.join(dir, 'aids.json');
+    aids = aidsPath(session);
+    fs.mkdirSync(path.dirname(aids), { recursive: true });
     fs.writeFileSync(aids, raw);
   } catch (e) {
     out({ ok: false, error: `Unreadable or invalid aids file: ${e.message}` });
@@ -173,6 +175,9 @@ function selftest() {
   assert.equal(s, computeSessionId('/r', 'b/x', 'main'));
   assert.notEqual(s, computeSessionId('/r', 'b/y', 'main'));
   assert.match(s, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  // Aids stage under ~/.pyor/aids (home-derived), not os.tmpdir() — so the app's
+  // read gate accepts it even when a coding harness sandboxes TMPDIR.
+  assert.ok(aidsPath('abc').endsWith(path.join('.pyor', 'aids', 'abc.json')));
   process.stdout.write('selftest ok\n');
 }
 

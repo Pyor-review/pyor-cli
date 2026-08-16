@@ -129,6 +129,14 @@ export function inboxPath(sessionId) {
   return path.join(pyorDir(), 'inbox', `${sessionId}.json`);
 }
 
+/** Where `open` stages the aids hand-off for the app to read. Under ~/.pyor
+ * (home-derived, so identical for the app and for a CLI whose TMPDIR a coding
+ * harness has sandboxed) rather than os.tmpdir(), whose divergence made the
+ * app's read gate silently reject the file. */
+export function aidsPath(sessionId) {
+  return path.join(pyorDir(), 'aids', `${sessionId}.json`);
+}
+
 /** Read + parse ~/.pyor/review-context.json, or null if absent/unreadable.
  * Its presence is the app's install + first-launch signal (ADR 0032). */
 export function readReviewContext() {
