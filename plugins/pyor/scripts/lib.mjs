@@ -137,6 +137,31 @@ export function aidsPath(sessionId) {
   return path.join(pyorDir(), 'aids', `${sessionId}.json`);
 }
 
+/** The return leg of the round-trip: replies the agent writes back so the app
+ * can render them on the reviewer's own notes. The agent appends, the app
+ * drains. Mirrors `inboxPath` in the opposite direction. */
+export function repliesPath(sessionId) {
+  return path.join(pyorDir(), 'replies', `${sessionId}.json`);
+}
+
+/** Append one reply op to a session's queue, creating it on first write. The
+ * app drains by rename, so a read-modify-write that loses a race re-creates the
+ * file rather than clobbering ops the app already took. */
+export function appendReplyOp(sessionId, op) {
+  const file = repliesPath(sessionId);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  let ops = [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (Array.isArray(parsed)) ops = parsed;
+  } catch {
+    // absent or malformed — start a fresh queue
+  }
+  ops.push(op);
+  fs.writeFileSync(file, JSON.stringify(ops, null, 2));
+  return ops.length;
+}
+
 /** Read + parse ~/.pyor/review-context.json, or null if absent/unreadable.
  * Its presence is the app's install + first-launch signal (ADR 0032). */
 export function readReviewContext() {

@@ -28,7 +28,10 @@ import {
   reviewContextPath,
   inboxPath,
   aidsPath,
+  appendReplyOp,
+  repliesPath,
 } from './lib.mjs';
+import { randomUUID } from 'node:crypto';
 
 const INSTALL_CMD = 'curl -fsSL https://pyor.review/install.sh | sh';
 
@@ -130,11 +133,15 @@ async function wait(argv) {
   // Meant to run as a BACKGROUND command (see review.md step 4): it blocks until
   // the user clicks "Send to Claude", then exits with the feedback — the
   // harness's task-completion notification IS the push that wakes the agent, no
-  // babysitting. Holds ~30 min then returns PENDING as a safety valve for an
-  // abandoned review; the agent re-arms a fresh background wait on the SAME
-  // (now-stable) session. Comments stay buffered server-side, so a missed window
-  // is always recoverable by re-running wait.
-  const timeoutMs = Number(flag(argv, 'timeout') ?? 1800) * 1000;
+  // babysitting.
+  //
+  // Waits with NO deadline by default. A review is read on human time: a
+  // deadline only ever fired on a reviewer who was still reading, and its exit
+  // relied on the agent noticing `pending` and re-arming, which is exactly the
+  // step that got skipped. Pass `--timeout <seconds>` for a bounded wait (0 also
+  // means no limit). The poll idles at one `stat` per interval, and the process
+  // dies with the shell that owns it.
+  const timeoutMs = Number(flag(argv, 'timeout') ?? 0) * 1000;
   const file = inboxPath(session);
   const started = Date.now();
   for (;;) {
@@ -146,11 +153,69 @@ async function wait(argv) {
     } catch {
       // not there yet
     }
-    if (Date.now() - started >= timeoutMs) {
+    if (timeoutMs > 0 && Date.now() - started >= timeoutMs) {
       out({ ok: true, status: 'pending' });
       return;
     }
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, pollDelay(Date.now() - started)));
+  }
+}
+
+/** Poll cadence: snappy while the reviewer is likely mid-read, relaxed once the
+ * wait is measured in hours. Bounded either way — the reviewer's click still
+ * lands within a few seconds. */
+function pollDelay(elapsedMs) {
+  return elapsedMs < 10 * 60_000 ? 1500 : 5000;
+}
+
+/** Answer one note the reviewer left: a reply rendered under their comment in
+ * Pyor, and/or the addressed flag that retires it from the next hand-off.
+ *
+ * `--body -` (or an omitted `--body` on a pipe) reads the reply from stdin, so
+ * a multi-paragraph markdown answer doesn't have to survive shell quoting. */
+function reply(argv) {
+  const session = flag(argv, 'session');
+  const commentId = flag(argv, 'comment');
+  if (!session || !commentId) {
+    out({ ok: false, error: 'reply needs --session and --comment' });
+    process.exitCode = 1;
+    return;
+  }
+  const bodyFlag = flag(argv, 'body');
+  const body =
+    bodyFlag && bodyFlag !== '-'
+      ? bodyFlag
+      : readStdin();
+  const addressed = argv.includes('--addressed');
+  if (!body && !addressed) {
+    out({ ok: false, error: 'reply needs a --body, --addressed, or both' });
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const queued = appendReplyOp(session, {
+      id: randomUUID(),
+      commentId,
+      body: body || null,
+      addressed,
+      author: flag(argv, 'author') ?? 'claude',
+      createdAt: new Date().toISOString(),
+    });
+    out({ ok: true, queued, file: repliesPath(session) });
+  } catch (e) {
+    out({ ok: false, error: `Could not queue the reply: ${e.message}` });
+    process.exitCode = 1;
+  }
+}
+
+/** Empty on a terminal — a bare `--addressed` with no pipe must not hang
+ * waiting for input that is never coming. */
+function readStdin() {
+  if (process.stdin.isTTY) return '';
+  try {
+    return fs.readFileSync(0, 'utf8').trim();
+  } catch {
+    return '';
   }
 }
 
@@ -178,6 +243,17 @@ function selftest() {
   // Aids stage under ~/.pyor/aids (home-derived), not os.tmpdir() — so the app's
   // read gate accepts it even when a coding harness sandboxes TMPDIR.
   assert.ok(aidsPath('abc').endsWith(path.join('.pyor', 'aids', 'abc.json')));
+  // wait holds with no deadline unless one is asked for.
+  assert.equal(Number(flag([], 'timeout') ?? 0), 0);
+  assert.equal(Number(flag(['--timeout', '90'], 'timeout') ?? 0), 90);
+  // Reply ops queue under ~/.pyor/replies and accumulate in write order.
+  const rs = computeSessionId('/selftest', 'b/replies', 'main');
+  fs.rmSync(repliesPath(rs), { force: true });
+  appendReplyOp(rs, { id: '1', commentId: 'c1', body: 'first', addressed: false });
+  assert.equal(appendReplyOp(rs, { id: '2', commentId: 'c1', addressed: true }), 2);
+  const queued = JSON.parse(fs.readFileSync(repliesPath(rs), 'utf8'));
+  assert.deepEqual(queued.map((o) => o.id), ['1', '2']);
+  fs.rmSync(repliesPath(rs), { force: true });
   process.stdout.write('selftest ok\n');
 }
 
@@ -186,8 +262,11 @@ const cmd = argv[0];
 if (cmd === '--selftest') selftest();
 else if (cmd === 'prepare') prepare(argv);
 else if (cmd === 'open') open(argv);
+else if (cmd === 'reply') reply(argv);
 else if (cmd === 'wait') await wait(argv);
 else {
-  process.stderr.write('usage: pyor-ai-review.mjs prepare|open|wait|--selftest\n');
+  process.stderr.write(
+    'usage: pyor-ai-review.mjs prepare|open|wait|reply|--selftest\n',
+  );
   process.exitCode = 1;
 }
