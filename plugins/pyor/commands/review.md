@@ -1,5 +1,6 @@
 ---
 description: Open the current branch's changes as an AI-reviewed local pre-PR review in Pyor (add `plain` to skip AI)
+argument-hint: "[importance | walkthrough | custom <instruction> | plain]"
 allowed-tools: Task, Bash(node:*), Bash(git:*), Bash(curl:*), Bash(mktemp:*), Write, Read
 ---
 
@@ -18,7 +19,7 @@ Arguments (optional):
 - A grouping intent — `importance` (default), `walkthrough`, or
   `custom "<instruction>"`. Example: `/pyor:review walkthrough`.
 - **`plain`** (or `fast`) — skip the AI panel and just open the diff for a quick
-  read. Equivalent to `/pyor:local-review`.
+  read.
 
 ## 0. Plain opt-out
 

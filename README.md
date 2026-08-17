@@ -37,11 +37,6 @@ read the actual code.
   /pyor:review plain                # skip the AI panel, just open the diff (alias: fast)
   ```
 
-- **`/pyor:local-review`** — a plain, fast open with **no AI** (equivalent to
-  `/pyor:review plain`). Resolves the repo root, current branch, and base
-  branch, then fires a `pyor://local-review` deep link the Pyor desktop app
-  handles.
-
 Both open your working changes as a local pre-PR review, ready to read before a
 PR exists; re-running reopens the same review (idempotent).
 

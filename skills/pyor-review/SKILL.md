@@ -1,6 +1,7 @@
 ---
 name: pyor-review
 description: Open the current git branch's working changes as an AI-reviewed local pre-PR review in the Pyor desktop app — file grouping + inline hints that point the reviewer at what matters. Works with any coding agent.
+argument-hint: "[importance | walkthrough | custom <instruction> | plain]"
 user-invocable: true
 ---
 
