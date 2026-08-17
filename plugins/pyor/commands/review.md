@@ -1,5 +1,6 @@
 ---
 description: Open the current branch's changes as an AI-reviewed local pre-PR review in Pyor (add `plain` to skip AI)
+argument-hint: "[importance | walkthrough | custom <instruction> | plain]"
 allowed-tools: Task, Bash(node:*), Bash(git:*), Bash(curl:*), Bash(mktemp:*), Write, Read
 ---
 
@@ -18,19 +19,22 @@ Arguments (optional):
 - A grouping intent — `importance` (default), `walkthrough`, or
   `custom "<instruction>"`. Example: `/pyor:review walkthrough`.
 - **`plain`** (or `fast`) — skip the AI panel and just open the diff for a quick
-  read. Equivalent to `/pyor:local-review`.
+  read.
 
 ## 0. Plain opt-out
 
 If the argument is `plain` or `fast`, do NOT run the panel — just open a plain
-review and stop:
+review:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-local-review.mjs"
 ```
 
 Tell the user the review is opening in Pyor (head vs base, as printed) with no
-AI review, then stop. Otherwise, run the AI flow below in order.
+AI review. Skipping the panel skips the *analysis*, not the round-trip: the
+script prints a `session <id>` line, so **park a background wait on it** (step 4)
+and answer whatever they send with `reply` (step 5). Then stop — do not run the
+panel. Otherwise, run the AI flow below in order.
 
 ## 1. Prepare
 
@@ -144,29 +148,58 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" open \
 
 Then tell the user: the review is opening in Pyor (head vs base) with your
 grouping + hints pre-loaded. They can read it, leave comments, and click
-**"Send to Claude"** to send the comments back here.
+**"Send to Claude"** to send the comments back here. Mention the **Auto-send**
+toggle next to that button — with it on, each note they save is delivered the
+moment they save it, no click needed.
 
 ## 4. Wait for feedback (park)
 
 Run `wait` **as a background command** (`run_in_background: true`). It blocks
-until the user clicks **"Send to Claude"**, then exits with their comments — the
-task-completion notification wakes you the instant they send, so you can do other
-work meanwhile without babysitting a poll.
+until the user's notes arrive, then exits with them — the task-completion
+notification wakes you the instant they send, so you can do other work meanwhile
+without babysitting a poll.
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" wait --session <sessionId>
 ```
 
+It holds with **no deadline** — a review is read on human time, and the wait is
+free while it idles. Pass `--timeout <seconds>` if you want a bounded one.
+
 - `status:"received"` — present the returned `feedback` (its `commentsMarkdown`
-  is reviewer notes to address) and act on them as the user directs.
-- `status:"pending"` — the ~30 min hold elapsed with nothing sent (safety valve).
-  If the user is still reviewing, **re-arm** another background `wait` on the same
-  `sessionId`. Comments are buffered server-side, so even if no `wait` was in
-  flight when they clicked, the next `wait` returns them immediately — if the user
-  says they sent comments and you didn't react, just run `wait` again.
+  is reviewer notes to address), act on them as the user directs, answer each one
+  with `reply` (step 5), and then **park a fresh `wait` on the same
+  `sessionId`** — the reviewer is usually still reading, and their next note has
+  nowhere to land without it.
+- `status:"pending"` — only possible when you passed `--timeout`. Re-arm another
+  background `wait` on the same `sessionId`. Comments are buffered on disk, so
+  even if no `wait` was in flight when they sent, the next `wait` returns them
+  immediately — if the user says they sent comments and you didn't react, just
+  run `wait` again.
 
 Because `sessionId` is stable per review (step 1), re-running `prepare` mid-flow
 (e.g. after fixing a launch issue) does **not** orphan a parked `wait` — it's the
 same session.
+
+## 5. Reply to each note
+
+Every note in `commentsMarkdown` carries an `id:` in its heading. Once you have
+acted on one, answer it back into Pyor so the reply renders under the reviewer's
+own comment, right where they wrote it:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" reply \
+  --session <sessionId> --comment <id from the heading> \
+  --body "what you did, or why you didn't" --addressed
+```
+
+- `--addressed` marks the note done. It greys out in Pyor and drops out of every
+  later hand-off, so the next `wait` returns only what is still open. Leave it
+  off when you are answering a question or disagreeing rather than fixing.
+- For a long markdown reply, pass `--body -` and pipe it on stdin instead of
+  fighting shell quoting.
+
+Reply to **every** note you were sent, one call each, before parking the next
+`wait`. A note with no reply reads as ignored.
 
 Do not commit, push, or create a PR — this is a pre-PR read.

@@ -1,6 +1,7 @@
 ---
 name: pyor-review
 description: Open the current git branch's working changes as an AI-reviewed local pre-PR review in the Pyor desktop app — file grouping + inline hints that point the reviewer at what matters. Works with any coding agent.
+argument-hint: "[importance | walkthrough | custom <instruction> | plain]"
 user-invocable: true
 ---
 
@@ -40,14 +41,16 @@ required on the PATH.
 
 ## 0. Plain opt-out
 
-If the argument is `plain` or `fast`, skip the AI flow — open a plain review and
-stop:
+If the argument is `plain` or `fast`, skip the AI flow — open a plain review:
 
 ```bash
 npx -y --package pyor-review pyor-local-review
 ```
 
-Tell the user the review is opening (head vs base, as printed), then stop.
+Tell the user the review is opening (head vs base, as printed). Skipping the AI
+skips the *analysis*, not the round-trip: the script prints a `session <id>`
+line, so park a `wait` on it (step 4) and answer what they send with `reply`
+(step 5). Then stop — do not generate aids.
 
 ## 1. Prepare
 
@@ -149,7 +152,8 @@ pyor-review open \
 
 Then tell the user the review is opening with the grouping + hints pre-loaded,
 and that they can read it, comment, and click **"Send to Claude"** to send their
-comments back to you.
+comments back to you. Mention the **Auto-send** toggle beside that button — with
+it on, each note reaches you the moment they save it, no click needed.
 
 ## 4. Wait for feedback
 
@@ -158,14 +162,36 @@ pyor-review wait --session <sessionId>
 ```
 
 Run this **as a background command** if your harness supports it — it blocks
-until the user clicks "Send to Claude" (up to ~30 min, then exits `pending`),
-and its exit is the signal that wakes you with the feedback. If you can't run
-background commands, run it in the foreground and re-invoke on `pending`.
+until the user's notes arrive, and its exit is the signal that wakes you with
+them. It holds with **no deadline**; pass `--timeout <seconds>` if you want a
+bounded wait. If you can't run background commands, run it in the foreground.
 
-- `status:"received"` — present the returned `feedback.commentsMarkdown` and act
-  on it as the user directs.
-- `status:"pending"` — nothing sent yet; re-run `wait` to keep listening, or stop
-  if the user is done. Comments are buffered on disk, so a click while no `wait`
-  is running is picked up by the next `wait` on the same (deterministic) session.
+- `status:"received"` — present the returned `feedback.commentsMarkdown`, act on
+  it as the user directs, reply to each note (step 5), then **park a fresh
+  `wait`** on the same session. The reviewer is usually still reading, and their
+  next note has nowhere to land without one.
+- `status:"pending"` — only when you passed `--timeout`. Re-run `wait` to keep
+  listening, or stop if the user is done. Comments are buffered on disk, so a
+  send while no `wait` is running is picked up by the next `wait` on the same
+  (deterministic) session.
+
+## 5. Reply to each note
+
+Every note in `commentsMarkdown` carries an `id:` in its heading. Answer it back
+into Pyor so your reply renders under the reviewer's own comment:
+
+```bash
+pyor-review reply --session <sessionId> --comment <id from the heading> \
+  --body "what you did, or why you didn't" --addressed
+```
+
+- `--addressed` marks the note done: it greys out in Pyor and drops out of every
+  later hand-off, so the next `wait` returns only what is still open. Leave it
+  off when you are answering a question or disagreeing rather than fixing.
+- For a long markdown reply, pass `--body -` and pipe it on stdin instead of
+  fighting shell quoting.
+
+Reply to **every** note you were sent, one call each, before parking the next
+`wait`. A note with no reply reads as ignored.
 
 Do not commit, push, or open a PR — this is a pre-PR read.

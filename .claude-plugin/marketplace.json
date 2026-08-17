@@ -12,7 +12,7 @@
     {
       "name": "pyor",
       "source": "./plugins/pyor",
-      "description": "Open the current branch's changes as a Pyor local pre-PR review — AI-reviewed by default (/pyor:review; a fresh sub-agent panel authors grouping + hints) or plain (/pyor:local-review)."
+      "description": "Open the current branch's changes as a Pyor local pre-PR review — AI-reviewed by default (/pyor:review; a fresh sub-agent panel authors grouping + hints) or plain (/pyor:review plain)."
     }
   ]
 }
