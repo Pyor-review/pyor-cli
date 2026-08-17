@@ -17,6 +17,7 @@
 import { strict as assert } from 'node:assert';
 import {
   fs,
+  os,
   path,
   resolveRepoHead,
   resolveBase,
@@ -141,17 +142,31 @@ async function wait(argv) {
   // step that got skipped. Pass `--timeout <seconds>` for a bounded wait (0 also
   // means no limit). The poll idles at one `stat` per interval, and the process
   // dies with the shell that owns it.
-  const timeoutMs = Number(flag(argv, 'timeout') ?? 0) * 1000;
+  const timeoutMs = parseTimeout(flag(argv, 'timeout'));
   const file = inboxPath(session);
   const started = Date.now();
   for (;;) {
+    // Claim by rename before reading. The app writes the inbox atomically, but
+    // read-then-delete still lets a second delivery land between the two and
+    // be removed unread. Renaming takes the payload out of the path the app
+    // publishes to, so the next one starts a fresh file.
+    const claimed = `${file}.claimed`;
     try {
-      const raw = fs.readFileSync(file, 'utf8');
-      fs.rmSync(file, { force: true }); // consume-once
+      fs.renameSync(file, claimed);
+    } catch {
+      // nothing queued yet
+    }
+    try {
+      const raw = fs.readFileSync(claimed, 'utf8');
+      fs.rmSync(claimed, { force: true });
       out({ ok: true, status: 'received', feedback: JSON.parse(raw) });
       return;
     } catch {
-      // not there yet
+      // not there, or unreadable: leave a corrupt claim behind rather than
+      // dropping feedback that exists nowhere else.
+      if (fs.existsSync(claimed)) {
+        fs.renameSync(claimed, `${file}.corrupt`);
+      }
     }
     if (timeoutMs > 0 && Date.now() - started >= timeoutMs) {
       out({ ok: true, status: 'pending' });
@@ -159,6 +174,19 @@ async function wait(argv) {
     }
     await new Promise((r) => setTimeout(r, pollDelay(Date.now() - started)));
   }
+}
+
+/** Minutes of waiting hinge on this, so anything that is not a finite positive
+ * number means "no deadline" only when it was omitted. Junk is rejected loudly
+ * rather than silently becoming an endless wait. */
+function parseTimeout(raw) {
+  if (raw == null) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    out({ ok: false, error: `--timeout must be a non-negative number, got ${raw}` });
+    process.exit(1);
+  }
+  return n * 1000;
 }
 
 /** Poll cadence: snappy while the reviewer is likely mid-read, relaxed once the
@@ -243,17 +271,31 @@ function selftest() {
   // Aids stage under ~/.pyor/aids (home-derived), not os.tmpdir() — so the app's
   // read gate accepts it even when a coding harness sandboxes TMPDIR.
   assert.ok(aidsPath('abc').endsWith(path.join('.pyor', 'aids', 'abc.json')));
-  // wait holds with no deadline unless one is asked for.
-  assert.equal(Number(flag([], 'timeout') ?? 0), 0);
-  assert.equal(Number(flag(['--timeout', '90'], 'timeout') ?? 0), 90);
-  // Reply ops queue under ~/.pyor/replies and accumulate in write order.
-  const rs = computeSessionId('/selftest', 'b/replies', 'main');
-  fs.rmSync(repliesPath(rs), { force: true });
-  appendReplyOp(rs, { id: '1', commentId: 'c1', body: 'first', addressed: false });
-  assert.equal(appendReplyOp(rs, { id: '2', commentId: 'c1', addressed: true }), 2);
-  const queued = JSON.parse(fs.readFileSync(repliesPath(rs), 'utf8'));
-  assert.deepEqual(queued.map((o) => o.id), ['1', '2']);
-  fs.rmSync(repliesPath(rs), { force: true });
+  // wait holds with no deadline unless one is asked for; junk is rejected.
+  assert.equal(parseTimeout(undefined), 0);
+  assert.equal(parseTimeout('90'), 90_000);
+  // Everything below writes to the channel root, so point it at a throwaway
+  // and put it back: a test run must never touch a real user's queues.
+  const realDir = process.env.PYOR_DIR;
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'pyor-selftest-'));
+  process.env.PYOR_DIR = sandbox;
+  try {
+    // Reply ops queue under <root>/replies and accumulate in write order.
+    const rs = computeSessionId('/selftest', 'b/replies', 'main');
+    appendReplyOp(rs, { id: '1', commentId: 'c1', body: 'first', addressed: false });
+    assert.equal(appendReplyOp(rs, { id: '2', commentId: 'c1', addressed: true }), 2);
+    const queued = JSON.parse(fs.readFileSync(repliesPath(rs), 'utf8'));
+    assert.deepEqual(queued.map((o) => o.id), ['1', '2']);
+    // The queue is written whole: no temp or lock file outlives the append.
+    const leftovers = fs
+      .readdirSync(path.dirname(repliesPath(rs)))
+      .filter((f) => f.endsWith('.tmp') || f.endsWith('.lock'));
+    assert.deepEqual(leftovers, []);
+  } finally {
+    if (realDir === undefined) delete process.env.PYOR_DIR;
+    else process.env.PYOR_DIR = realDir;
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
   process.stdout.write('selftest ok\n');
 }
 

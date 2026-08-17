@@ -107,8 +107,10 @@ export function openUrl(url) {
   });
 }
 
+/** PYOR_DIR overrides the channel root. Only the selftest sets it, so a test
+ * run never touches the real queues sitting in a user's home. */
 export function pyorDir() {
-  return path.join(os.homedir(), '.pyor');
+  return process.env.PYOR_DIR || path.join(os.homedir(), '.pyor');
 }
 
 export function reviewContextPath() {
@@ -144,22 +146,52 @@ export function repliesPath(sessionId) {
   return path.join(pyorDir(), 'replies', `${sessionId}.json`);
 }
 
-/** Append one reply op to a session's queue, creating it on first write. The
- * app drains by rename, so a read-modify-write that loses a race re-creates the
- * file rather than clobbering ops the app already took. */
+/** Append one reply op to a session's queue, creating it on first write.
+ *
+ * Two hazards, both of which lose an answer silently:
+ *   - the app drains by rename, so the write must land whole. Write a temp file
+ *     and rename it into place, never edit the queue where it is read from.
+ *   - the read-modify-write below is not atomic on its own, so two replies
+ *     racing would drop one. A create-exclusive lock file serialises them.
+ */
 export function appendReplyOp(sessionId, op) {
   const file = repliesPath(sessionId);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  let ops = [];
+  const release = acquireLock(`${file}.lock`);
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (Array.isArray(parsed)) ops = parsed;
-  } catch {
-    // absent or malformed — start a fresh queue
+    let ops = [];
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (Array.isArray(parsed)) ops = parsed;
+    } catch {
+      // absent or malformed - start a fresh queue
+    }
+    ops.push(op);
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(ops, null, 2));
+    fs.renameSync(tmp, file);
+    return ops.length;
+  } finally {
+    release();
   }
-  ops.push(op);
-  fs.writeFileSync(file, JSON.stringify(ops, null, 2));
-  return ops.length;
+}
+
+/** Exclusive lock via create-if-absent, which is atomic on every platform we
+ * run on. Spins briefly, then takes the lock anyway: a stale file from a killed
+ * process must not wedge every future reply. */
+function acquireLock(lockPath, timeoutMs = 2000) {
+  const started = Date.now();
+  for (;;) {
+    try {
+      fs.closeSync(fs.openSync(lockPath, 'wx'));
+      break;
+    } catch {
+      if (Date.now() - started >= timeoutMs) break;
+      // Busy-wait: the critical section is one small read and write, so a
+      // sleep primitive is not worth a dependency here.
+    }
+  }
+  return () => fs.rmSync(lockPath, { force: true });
 }
 
 /** Read + parse ~/.pyor/review-context.json, or null if absent/unreadable.
