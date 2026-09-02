@@ -20,7 +20,7 @@ read the actual code.
 
 ## Commands
 
-- **`/pyor:review`** — the primary command. **Authors an AI review by default.**
+- **`/pyor:review`**, the primary command. **Authors an AI review by default.**
   A panel of **fresh sub-agents** produces the file grouping + inline hints from
   the diff, then hands them to Pyor to render. The reviewers run with **no
   context from the calling session** (they see only the code, so the review
@@ -31,7 +31,7 @@ read the actual code.
   Takes an optional grouping intent:
 
   ```sh
-  /pyor:review                      # importance — signal vs noise, important first (default)
+  /pyor:review                      # importance: signal vs noise, important first (default)
   /pyor:review walkthrough          # order the groups as a reading path through the change
   /pyor:review custom "by feature"  # your own grouping instruction
   /pyor:review plain                # skip the AI panel, just open the diff (alias: fast)
@@ -42,14 +42,14 @@ PR exists; re-running reopens the same review (idempotent).
 
 ## Install
 
-**Claude Code** — install the plugin:
+**Claude Code**, install the plugin:
 
 ```sh
 /plugin marketplace add Pyor-review/pyor-cli
 /plugin install pyor@pyor
 ```
 
-**Any other agent** (Codex, Cursor, Amp, Gemini CLI, Windsurf, Zed, …) — install
+**Any other agent** (Codex, Cursor, Amp, Gemini CLI, Windsurf, Zed, …), install
 the skill with [`skills`](https://github.com/vercel-labs/skills), which mirrors
 it into your agent's format:
 
@@ -62,7 +62,7 @@ repository. Both drive the same [`pyor-review`](#the-pyor-review-cli) flow.
 
 ## Requirements
 
-- The **Pyor desktop app** — it registers the `pyor://` URL scheme, renders the
+- The **Pyor desktop app**. It registers the `pyor://` URL scheme, renders the
   review, and exports the review context the AI panel writes against. Grab it at
   [pyor.review](https://pyor.review); `/pyor:review` will offer to install it for
   you if it's missing.
@@ -72,7 +72,7 @@ repository. Both drive the same [`pyor-review`](#the-pyor-review-cli) flow.
 ## The `pyor-review` CLI
 
 Both the Claude plugin and the cross-agent skill drive one small, agent-neutral
-CLI that does the deterministic parts — git resolution, the working-tree
+CLI that does the deterministic parts: git resolution, the working-tree
 revision token (which must match what the app computes so aids cache-hit), the
 `pyor://` deep link, and the `~/.pyor` feedback channel. The agent only supplies
 the analysis (grouping + hints).
