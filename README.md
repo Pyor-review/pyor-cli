@@ -54,7 +54,7 @@ the skill with [`skills`](https://github.com/vercel-labs/skills), which mirrors
 it into your agent's format:
 
 ```sh
-npx skills add Pyor-review/pyor-cli
+npx skills add https://github.com/Pyor-review/pyor-cli/tree/main/plugins/pyor/skills/pyor-review
 ```
 
 Either way, then run `/pyor:review` (or invoke the `pyor-review` skill) from any
@@ -64,8 +64,8 @@ repository. Both drive the same [`pyor-review`](#the-pyor-review-cli) flow.
 
 - The **Pyor desktop app**. It registers the `pyor://` URL scheme, renders the
   review, and exports the review context the AI panel writes against. Grab it at
-  [pyor.review](https://pyor.review); `/pyor:review` will offer to install it for
-  you if it's missing.
+  [pyor.review](https://pyor.review); `/pyor:review` hands you the install
+  command if it's missing.
 - `git` and `node` on your PATH.
 - `gh` (the GitHub CLI) is optional, used only when a command needs GitHub data.
 
