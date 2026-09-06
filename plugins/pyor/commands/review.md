@@ -1,7 +1,7 @@
 ---
 description: Open the current branch's changes as an AI-reviewed local pre-PR review in Pyor (add `plain` to skip AI)
 argument-hint: "[importance | walkthrough | custom <instruction> | plain]"
-allowed-tools: Task, Bash(node:*), Bash(git:*), Bash(curl:*), Bash(mktemp:*), Write, Read
+allowed-tools: Task, Bash(node:*), Bash(git:*), Bash(mktemp:*), Write, Read
 ---
 
 The primary way to open the working changes of the current git repository as a
@@ -45,11 +45,17 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" prepare --intent <intent
 Parse the JSON on stdout.
 
 - If `ok:false` and `error` — relay it and stop (not a git repo / detached HEAD).
-- If `contextPresent:false` — **Pyor isn't set up.** Ask the user: *"Pyor isn't
-  installed (or hasn't been launched yet). Install it now?"* On **yes**, run
-  `curl -fsSL https://pyor.review/install.sh | sh`, then tell them to **launch
-  Pyor once** so it writes its review context, and **re-run prepare** (loop until
-  `contextPresent:true`). On **no**, stop.
+- If `contextPresent:false` — **Pyor isn't set up.** Tell the user Pyor isn't
+  installed (or hasn't been launched yet) and give them the install command to
+  run themselves — **never run it for them**:
+
+  ```bash
+  curl -fsSL https://pyor.review/install.sh | sh
+  ```
+
+  Then ask them to **launch Pyor once** so it writes its review context, and
+  **re-run prepare** (loop until `contextPresent:true`). If they'd rather not
+  install, stop.
 - If `ok:true` — keep `sessionId`, `repo`, `head`, `base`, `revision`,
   `basePromptVersion`, `intent`, `customText`, and `context`. `sessionId` is
   **stable per review** — re-running `prepare` for the same repo/head/base

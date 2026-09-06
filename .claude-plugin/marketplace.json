@@ -1,18 +1,26 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "pyor",
+  "description": "Agent tooling for Pyor, the native home for GitHub code review.",
   "owner": {
     "name": "Pyor",
     "url": "https://github.com/Pyor-review"
   },
   "metadata": {
-    "description": "Claude Code tooling for Pyor, the native home for GitHub code review.",
-    "version": "0.3.0"
+    "description": "Agent tooling for Pyor, the native home for GitHub code review.",
+    "version": "0.5.0"
   },
   "plugins": [
     {
       "name": "pyor",
       "source": "./plugins/pyor",
-      "description": "Open the current branch's changes as a Pyor local pre-PR review — AI-reviewed by default (/pyor:review; a fresh sub-agent panel authors grouping + hints) or plain (/pyor:review plain)."
+      "description": "Open the current branch's changes as a Pyor local pre-PR review — AI-reviewed by default (/pyor:review; a fresh sub-agent panel authors grouping + hints) or plain (/pyor:review plain).",
+      "author": {
+        "name": "Pyor",
+        "url": "https://github.com/Pyor-review"
+      },
+      "category": "development",
+      "homepage": "https://pyor.review"
     }
   ]
 }

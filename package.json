@@ -9,14 +9,15 @@
   },
   "files": [
     "plugins/pyor/scripts",
-    "skills"
+    "plugins/pyor/skills"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "test": "node plugins/pyor/scripts/pyor-ai-review.mjs --selftest && node plugins/pyor/scripts/pyor-local-review.mjs --selftest",
-    "prepublishOnly": "npm test"
+    "prepublishOnly": "npm test",
+    "version": "node scripts/sync-version.mjs && git add plugins/pyor/.claude-plugin/plugin.json .claude-plugin/marketplace.json"
   },
   "keywords": [
     "pyor",
