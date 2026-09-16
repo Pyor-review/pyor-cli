@@ -18,11 +18,14 @@
 
 import { strict as assert } from 'node:assert';
 import {
+  INSTALL_CMD,
   resolveRepoHead,
   resolveBase,
   buildDeepLink,
   openUrl,
   computeSessionId,
+  readReviewContext,
+  reviewContextPath,
 } from './lib.mjs';
 
 function selftest() {
@@ -65,6 +68,14 @@ function main() {
   const url = buildDeepLink({ path: repo, head, base, session });
   if (argv.includes('--print')) {
     console.log(url);
+    return;
+  }
+  if (!readReviewContext()) {
+    console.error(
+      `Pyor is not installed, or has not been launched yet (${reviewContextPath()} is missing).\n` +
+        `Install it with:\n  ${INSTALL_CMD}\nthen launch Pyor once and re-run.`,
+    );
+    process.exitCode = 1;
     return;
   }
   console.log(`Opening Pyor local review: ${head} vs ${base}`);

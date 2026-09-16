@@ -25,6 +25,7 @@ import {
   computeSessionId,
   buildDeepLink,
   openUrl,
+  INSTALL_CMD,
   readReviewContext,
   reviewContextPath,
   inboxPath,
@@ -34,7 +35,6 @@ import {
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
 
-const INSTALL_CMD = 'curl -fsSL https://pyor.review/install.sh | sh';
 
 function out(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
