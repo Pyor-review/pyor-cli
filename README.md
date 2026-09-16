@@ -4,7 +4,11 @@ Agent tooling for [Pyor](https://pyor.review), the native home for GitHub code
 review. Works with **Claude Code, Codex, Cursor, and any coding agent.**
 
 <p align="center">
-  <img src="assets/pyor-review.png" alt="A Pyor local pre-PR review: changes grouped by AI into labelled folders, with an inline hint pointing at a risk, and a Send to Claude button." width="900">
+  <a href="https://youtu.be/bTvkZOHDKP4">
+    <img src="assets/pyor-demo-thumb.jpg" alt="Demo video: a Pyor local pre-PR review with AI-grouped files and an inline hint on the diff. Click to watch on YouTube." width="900">
+  </a>
+  <br>
+  <a href="https://youtu.be/bTvkZOHDKP4">Watch the 5-minute demo</a>: /pyor:review in Claude Code, notes in Pyor, fixes back in the branch.
 </p>
 
 Open your working changes as a **local pre-PR review** in the Pyor desktop app,
