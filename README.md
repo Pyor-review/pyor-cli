@@ -8,7 +8,7 @@ review. Works with **Claude Code, Codex, Cursor, and any coding agent.**
     <img src="assets/pyor-demo-thumb.jpg" alt="Demo video: a Pyor local pre-PR review with AI-grouped files and an inline hint on the diff. Click to watch on YouTube." width="900">
   </a>
   <br>
-  <a href="https://youtu.be/bTvkZOHDKP4">Watch the 2-minute demo</a>: /pyor:review in Claude Code, notes in Pyor, fixes back in the branch.
+  <a href="https://youtu.be/bTvkZOHDKP4">Watch the 5-minute demo</a>: /pyor:review in Claude Code, notes in Pyor, fixes back in the branch.
 </p>
 
 Open your working changes as a **local pre-PR review** in the Pyor desktop app,
