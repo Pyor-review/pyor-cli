@@ -194,6 +194,8 @@ function acquireLock(lockPath, timeoutMs = 2000) {
   return () => fs.rmSync(lockPath, { force: true });
 }
 
+export const INSTALL_CMD = 'curl -fsSL https://pyor.review/install.sh | sh';
+
 /** Read + parse ~/.pyor/review-context.json, or null if absent/unreadable.
  * Its presence is the app's install + first-launch signal (ADR 0032). */
 export function readReviewContext() {

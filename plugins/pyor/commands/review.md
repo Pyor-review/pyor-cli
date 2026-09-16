@@ -30,8 +30,10 @@ review:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-local-review.mjs"
 ```
 
-Tell the user the review is opening in Pyor (head vs base, as printed) with no
-AI review. Skipping the panel skips the *analysis*, not the round-trip: the
+If it exits non-zero saying Pyor is not installed, relay its message: the user
+runs the install command themselves (**never run it for them**), launches Pyor
+once, and re-runs. Otherwise tell the user the review is opening in Pyor (head
+vs base, as printed) with no AI review. Skipping the panel skips the *analysis*, not the round-trip: the
 script prints a `session <id>` line, so **park a background wait on it** (step 4)
 and answer whatever they send with `reply` (step 5). Then stop — do not run the
 panel. Otherwise, run the AI flow below in order.

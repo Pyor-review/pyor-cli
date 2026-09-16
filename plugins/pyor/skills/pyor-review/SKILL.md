@@ -47,7 +47,10 @@ If the argument is `plain` or `fast`, skip the AI flow — open a plain review:
 npx -y --package pyor-review pyor-local-review
 ```
 
-Tell the user the review is opening (head vs base, as printed). Skipping the AI
+If it exits non-zero saying Pyor is not installed, relay its message: the user
+runs the install command themselves (never run it for them), launches Pyor once,
+and re-runs. Otherwise tell the user the review is opening (head vs base, as
+printed). Skipping the AI
 skips the *analysis*, not the round-trip: the script prints a `session <id>`
 line, so park a `wait` on it (step 4) and answer what they send with `reply`
 (step 5). Then stop — do not generate aids.
