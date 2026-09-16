@@ -1,0 +1,26 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'pyor--v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Tag must match package.json
+        run: |
+          tag="${GITHUB_REF_NAME#pyor--v}"
+          pkg="$(node -p "require('./package.json').version")"
+          [ "$tag" = "$pkg" ] || { echo "tag $tag != package.json $pkg"; exit 1; }
+      - run: npm publish
