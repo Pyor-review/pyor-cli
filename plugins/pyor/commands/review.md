@@ -184,6 +184,9 @@ free while it idles. Pass `--timeout <seconds>` if you want a bounded one.
   even if no `wait` was in flight when they sent, the next `wait` returns them
   immediately — if the user says they sent comments and you didn't react, just
   run `wait` again.
+- `status:"superseded"` — a newer `wait` on the same `sessionId` took over (a
+  re-run, or another session on this branch). Only one `wait` consumes a
+  session's notes, so this one stepped aside: do **not** re-arm it.
 
 Because `sessionId` is stable per review (step 1), re-running `prepare` mid-flow
 (e.g. after fixing a launch issue) does **not** orphan a parked `wait` — it's the
