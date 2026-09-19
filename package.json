@@ -1,6 +1,6 @@
 {
   "name": "pyor-review",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Open your working git changes as an AI-reviewed local pre-PR review in the Pyor desktop app. Works with any coding agent.",
   "type": "module",
   "bin": {
