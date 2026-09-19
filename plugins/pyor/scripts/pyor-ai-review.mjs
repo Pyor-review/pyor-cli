@@ -145,7 +145,15 @@ async function wait(argv) {
   const timeoutMs = parseTimeout(flag(argv, 'timeout'));
   const file = inboxPath(session);
   const started = Date.now();
+  claimWaiter(session);
   for (;;) {
+    // One consumer per session. A wait parked earlier (a re-run, or another
+    // session on the same branch: the id is deterministic) would otherwise
+    // swallow the next payload and the reviewer's note would reach nobody.
+    if (!waiterIsMine(session)) {
+      out({ ok: true, status: 'superseded' });
+      return;
+    }
     // Claim by rename before reading. The app writes the inbox atomically, but
     // read-then-delete still lets a second delivery land between the two and
     // be removed unread. Renaming takes the payload out of the path the app
@@ -159,6 +167,7 @@ async function wait(argv) {
     try {
       const raw = fs.readFileSync(claimed, 'utf8');
       fs.rmSync(claimed, { force: true });
+      fs.rmSync(waiterPath(session), { force: true });
       out({ ok: true, status: 'received', feedback: JSON.parse(raw) });
       return;
     } catch {
@@ -173,6 +182,29 @@ async function wait(argv) {
       return;
     }
     await new Promise((r) => setTimeout(r, pollDelay(Date.now() - started)));
+  }
+}
+
+/** The waiter lease: the pid of the one `wait` allowed to consume this
+ * session's inbox. The newest wait always takes it, so a stale one (its session
+ * closed, or the command re-run) steps aside instead of competing. */
+function waiterPath(session) {
+  return `${inboxPath(session)}.waiter`;
+}
+
+function claimWaiter(session) {
+  fs.mkdirSync(path.dirname(waiterPath(session)), { recursive: true });
+  fs.writeFileSync(waiterPath(session), String(process.pid));
+}
+
+/** A missing or half-written lease reads as still ours: only another pid on
+ * file means a newer wait took over. */
+function waiterIsMine(session) {
+  try {
+    const pid = Number(fs.readFileSync(waiterPath(session), 'utf8'));
+    return Number.isNaN(pid) || pid === process.pid;
+  } catch {
+    return true;
   }
 }
 
@@ -286,6 +318,12 @@ function selftest() {
     assert.equal(appendReplyOp(rs, { id: '2', commentId: 'c1', addressed: true }), 2);
     const queued = JSON.parse(fs.readFileSync(repliesPath(rs), 'utf8'));
     assert.deepEqual(queued.map((o) => o.id), ['1', '2']);
+    // The newest waiter owns the session; an earlier one sees itself replaced.
+    const ws = computeSessionId('/selftest', 'b/wait', 'main');
+    claimWaiter(ws);
+    assert.equal(waiterIsMine(ws), true);
+    fs.writeFileSync(waiterPath(ws), String(process.pid + 1));
+    assert.equal(waiterIsMine(ws), false);
     // The queue is written whole: no temp or lock file outlives the append.
     const leftovers = fs
       .readdirSync(path.dirname(repliesPath(rs)))

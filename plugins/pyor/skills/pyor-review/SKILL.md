@@ -177,6 +177,9 @@ bounded wait. If you can't run background commands, run it in the foreground.
   listening, or stop if the user is done. Comments are buffered on disk, so a
   send while no `wait` is running is picked up by the next `wait` on the same
   (deterministic) session.
+- `status:"superseded"` — a newer `wait` on the same session took over (a
+  re-run, or another agent session on this branch). Only one `wait` consumes a
+  session's notes, so this one stepped aside: do not re-arm it.
 
 ## 5. Reply to each note
 
