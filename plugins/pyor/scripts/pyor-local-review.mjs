@@ -13,6 +13,7 @@
 //
 // Usage:
 //   node pyor-local-review.mjs             open the review in Pyor
+//   node pyor-local-review.mjs --agent <a>  name the agent driving the session
 //   node pyor-local-review.mjs --print     print the deep link, do not open
 //   node pyor-local-review.mjs --selftest  run the built-in assertions
 
@@ -27,6 +28,7 @@ import {
   readReviewContext,
   reviewContextPath,
   recordReview,
+  flag,
 } from './lib.mjs';
 
 function selftest() {
@@ -66,7 +68,8 @@ function main() {
   }
   const base = resolveBase(repo, head);
   const session = computeSessionId(repo, head, base);
-  const url = buildDeepLink({ path: repo, head, base, session });
+  const agent = flag(argv, 'agent');
+  const url = buildDeepLink({ path: repo, head, base, session, agent });
   if (argv.includes('--print')) {
     console.log(url);
     return;
@@ -82,7 +85,7 @@ function main() {
   console.log(`Opening Pyor local review: ${head} vs ${base}`);
   console.log(`session ${session}`);
   try {
-    recordReview({ session, repo, head });
+    recordReview({ session, repo, head, agent });
     openUrl(url);
   } catch (e) {
     console.error(`Could not open Pyor: ${e.message}`);

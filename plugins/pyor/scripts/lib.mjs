@@ -81,13 +81,14 @@ export function computeRevision(repo) {
 }
 
 /** Build the `pyor://local-review` deep link. Extends ADR 0030 with the ADR
- * 0032 aids + session + title params. Pure; URLSearchParams encodes
- * paths/branches. */
-export function buildDeepLink({ path: repoPath, worktree, head, base, aids, session, title }) {
+ * 0032 aids + session + title params, and the agent driving the session. Pure;
+ * URLSearchParams encodes paths/branches. */
+export function buildDeepLink({ path: repoPath, worktree, head, base, aids, session, title, agent }) {
   const q = new URLSearchParams({ path: repoPath, worktree: worktree ?? repoPath, head, base });
   if (aids) q.set('aids', aids);
   if (session) q.set('session', session);
   if (title) q.set('title', title);
+  if (agent) q.set('agent', agent);
   return `pyor://local-review?${q.toString()}`;
 }
 
@@ -128,14 +129,23 @@ export function computeSessionId(repo, head, base) {
 }
 
 /** Which repo and branch a session reviews, so `status` can find the review
- * from a folder above the repo. */
+ * from a folder above the repo, and which agent drives it. */
 export function reviewPath(sessionId) {
   return path.join(pyorDir(), 'reviews', `${sessionId}.json`);
 }
 
-export function recordReview({ session, repo, head }) {
+export function recordReview({ session, repo, head, agent }) {
   fs.mkdirSync(path.dirname(reviewPath(session)), { recursive: true });
-  fs.writeFileSync(reviewPath(session), JSON.stringify({ session, repo, head }));
+  fs.writeFileSync(reviewPath(session), JSON.stringify({ session, repo, head, agent }));
+}
+
+/** The agent `open` named for this session, so its replies carry that name. */
+export function recordedAgent(session) {
+  try {
+    return JSON.parse(fs.readFileSync(reviewPath(session), 'utf8')).agent;
+  } catch {
+    return undefined;
+  }
 }
 
 export function inboxPath(sessionId) {
@@ -203,6 +213,15 @@ export function acquireLock(lockPath, timeoutMs = 2000) {
     }
   }
   return () => fs.rmSync(lockPath, { force: true });
+}
+
+/** The value after `--name`. A bare flag token is never a value, so a missing
+ * value cannot swallow the flag that follows it; text such as a `--body` that
+ * starts with dashes still reads as text. */
+export function flag(argv, name) {
+  const i = argv.indexOf(`--${name}`);
+  const value = i >= 0 ? argv[i + 1] : undefined;
+  return value && /^--[a-z][a-z-]*$/.test(value) ? undefined : value;
 }
 
 export const INSTALL_CMD = 'curl -fsSL https://pyor.review/install.sh | sh';

@@ -27,7 +27,7 @@ If the argument is `plain` or `fast`, do NOT run the panel — just open a plain
 review:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-local-review.mjs"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-local-review.mjs" --agent claude
 ```
 
 If it exits non-zero saying Pyor is not installed, relay its message: the user
@@ -74,7 +74,7 @@ instead of the raw branch slug.
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" open \
   --session <sessionId> --repo <repo> --head <head> --base <base> \
-  --title "<short session title>"
+  --title "<short session title>" --agent claude
 ```
 
 Without `--aids`, Pyor opens on the diff and shows "Claude is reviewing" in the
@@ -181,7 +181,7 @@ Write it to a temp file (use `mktemp`), shaped exactly:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" open \
   --aids <tempfile> --session <sessionId> \
   --repo <repo> --head <head> --base <base> \
-  --title "<short session title>"
+  --title "<short session title>" --agent claude
 ```
 
 This replaces the streamed hints with the merged set and adds the grouping.

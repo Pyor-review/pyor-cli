@@ -40,21 +40,14 @@ import {
   acquireLock,
   recordReview,
   reviewPath,
+  flag,
+  recordedAgent,
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
 
 
 function out(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
-}
-
-/** The value after `--name`. A bare flag token is never a value, so a missing
- * value cannot swallow the flag that follows it; text such as a `--body` that
- * starts with dashes still reads as text. */
-function flag(argv, name) {
-  const i = argv.indexOf(`--${name}`);
-  const value = i >= 0 ? argv[i + 1] : undefined;
-  return value && /^--[a-z][a-z-]*$/.test(value) ? undefined : value;
 }
 
 function prepare(argv) {
@@ -103,6 +96,7 @@ function open(argv) {
   const head = flag(argv, 'head');
   const base = flag(argv, 'base');
   const title = flag(argv, 'title');
+  const agent = flag(argv, 'agent');
   if (!session || !repo || !head || !base) {
     out({ ok: false, error: 'open needs --session --repo --head --base' });
     process.exitCode = 1;
@@ -124,9 +118,9 @@ function open(argv) {
     process.exitCode = 1;
     return;
   }
-  const url = buildDeepLink({ path: repo, head, base, aids, session, title });
+  const url = buildDeepLink({ path: repo, head, base, aids, session, title, agent });
   try {
-    recordReview({ session, repo, head });
+    recordReview({ session, repo, head, agent });
     openUrl(url);
     out({ ok: true, url });
   } catch (e) {
@@ -440,7 +434,7 @@ function reply(argv) {
       commentId,
       body: body || null,
       addressed,
-      author: flag(argv, 'author') ?? 'claude',
+      author: flag(argv, 'author') ?? recordedAgent(session) ?? 'claude',
       createdAt: new Date().toISOString(),
     });
     out({ ok: true, queued, file: repliesPath(session) });
@@ -468,11 +462,13 @@ function selftest() {
     base: 'main',
     aids: '/tmp/a.json',
     session: 'abc',
+    agent: 'codex',
   });
   const u = new URL(url);
   assert.equal(u.searchParams.get('path'), '/r');
   assert.equal(u.searchParams.get('aids'), '/tmp/a.json');
   assert.equal(u.searchParams.get('session'), 'abc');
+  assert.equal(u.searchParams.get('agent'), 'codex');
   // computeRevision against this very repo returns "<sha>:<tree>".
   const rev = computeRevision(process.cwd());
   assert.match(rev, /^[0-9a-f]{7,40}(:[0-9a-f]{7,40})?$/i);
@@ -530,6 +526,9 @@ function selftest() {
     const app = path.join(parent, 'app');
     const child = computeSessionId(app, 'b/child', 'main');
     recordReview({ session: child, repo: app, head: 'b/child' });
+    // The agent `open` named is what an unattributed reply is signed with.
+    recordReview({ session: rs, repo: '/selftest', head: 'b/replies', agent: 'codex' });
+    assert.equal(recordedAgent(rs), 'codex');
     assert.deepEqual(openReviews(parent).map((r) => r.session), [child]);
     assert.deepEqual(openReviews(path.join(parent, 'app-other')), []);
     fs.utimesSync(reviewPath(child), old, old);
