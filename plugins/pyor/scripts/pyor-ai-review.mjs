@@ -15,7 +15,7 @@
 //              reviewer sends back, and print them once they arrive.
 //
 // The agent orchestrates: prepare → open → (generate aids, progress after each
-// reviewer) → open --aids → wait. See commands/ai-review.md.
+// reviewer) → open --aids → wait. See commands/review.md.
 
 import { strict as assert } from 'node:assert';
 import {
@@ -35,6 +35,7 @@ import {
   aidsPath,
   appendReplyOp,
   repliesPath,
+  acquireLock,
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
 
@@ -43,12 +44,13 @@ function out(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
 }
 
-/** The value after `--name`. Another flag is never a value: an empty shell
- * variable must not let `--session` swallow the flag that follows it. */
+/** The value after `--name`. A bare flag token is never a value, so a missing
+ * value cannot swallow the flag that follows it; text such as a `--body` that
+ * starts with dashes still reads as text. */
 function flag(argv, name) {
   const i = argv.indexOf(`--${name}`);
   const value = i >= 0 ? argv[i + 1] : undefined;
-  return value?.startsWith('--') ? undefined : value;
+  return value && /^--[a-z][a-z-]*$/.test(value) ? undefined : value;
 }
 
 function prepare(argv) {
@@ -112,7 +114,7 @@ function open(argv) {
   try {
     const raw = aidsIn ? fs.readFileSync(aidsIn, 'utf8') : JSON.stringify({ progress: {} });
     JSON.parse(raw);
-    writeAids(session, raw);
+    withAidsLock(session, () => writeAids(session, raw));
   } catch (e) {
     out({ ok: false, error: `Unreadable or invalid aids file: ${e.message}` });
     process.exitCode = 1;
@@ -125,6 +127,17 @@ function open(argv) {
   } catch (e) {
     out({ ok: false, error: `Could not open Pyor: ${e.message}` });
     process.exitCode = 1;
+  }
+}
+
+/** Reviewers finish together, so their `progress` calls race each other and
+ * the final `open --aids`: every read-modify-write of the file holds this. */
+function withAidsLock(session, fn) {
+  const release = acquireLock(`${aidsPath(session)}.lock`);
+  try {
+    return fn();
+  } finally {
+    release();
   }
 }
 
@@ -148,26 +161,34 @@ function progress(argv) {
     process.exitCode = 1;
     return;
   }
-  let current = {};
   try {
-    current = JSON.parse(fs.readFileSync(aidsPath(session), 'utf8'));
-  } catch {
-    // no live file yet: start one
-  }
-  if (current.revision) {
-    out({ ok: true, status: 'finished' });
-    return;
-  }
-  try {
-    const live = current.progress ?? {};
-    const added = hintsIn ? JSON.parse(fs.readFileSync(hintsIn, 'utf8')).hints ?? [] : [];
-    const hints = [...(live.hints ?? []), ...added];
-    writeAids(session, JSON.stringify({ progress: { ...live, hints, ...(failed ? { failed } : {}) } }));
-    out({ ok: true, hints: hints.length });
+    const added = hintsIn ? readHints(hintsIn) : [];
+    const result = withAidsLock(session, () => {
+      let current = {};
+      try {
+        current = JSON.parse(fs.readFileSync(aidsPath(session), 'utf8'));
+      } catch {
+        // no live file yet: start one
+      }
+      if (current.revision) return { ok: true, status: 'finished' };
+      const live = current.progress ?? {};
+      const hints = [...(live.hints ?? []), ...added];
+      writeAids(session, JSON.stringify({ progress: { ...live, hints, ...(failed ? { failed } : {}) } }));
+      return { ok: true, hints: hints.length };
+    });
+    out(result);
   } catch (e) {
     out({ ok: false, error: `Could not record progress: ${e.message}` });
     process.exitCode = 1;
   }
+}
+
+/** A reviewer's output must be `{ "hints": [...] }`; anything else is a mistake
+ * worth failing on rather than recording nothing and reporting ok. */
+function readHints(file) {
+  const hints = JSON.parse(fs.readFileSync(file, 'utf8')).hints;
+  if (!Array.isArray(hints)) throw new Error(`${file} is not shaped { "hints": [...] }`);
+  return hints;
 }
 
 async function wait(argv) {
@@ -352,6 +373,7 @@ function selftest() {
   // A missing value reads as missing, not as the next flag.
   assert.equal(flag(['--session', '--hints', 'f'], 'session'), undefined);
   assert.equal(flag(['--body', '-'], 'body'), '-');
+  assert.equal(flag(['--body', '--- see below'], 'body'), '--- see below');
   // wait holds with no deadline unless one is asked for; junk is rejected.
   assert.equal(parseTimeout(undefined), 0);
   assert.equal(parseTimeout('90'), 90_000);
@@ -382,6 +404,9 @@ function selftest() {
     progress(['--session', ps, '--hints', lens]);
     const live = JSON.parse(fs.readFileSync(aidsPath(ps), 'utf8'));
     assert.equal(live.progress.hints.length, 2);
+    const bare = path.join(sandbox, 'bare.json');
+    fs.writeFileSync(bare, JSON.stringify([{ path: 'a', line: 1 }]));
+    assert.throws(() => readHints(bare));
     writeAids(ps, JSON.stringify({ revision: 'r' }));
     progress(['--session', ps, '--failed', 'late']);
     assert.equal(JSON.parse(fs.readFileSync(aidsPath(ps), 'utf8')).revision, 'r');
