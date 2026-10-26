@@ -223,6 +223,7 @@ async function wait(argv) {
       out({ ok: true, status: 'superseded' });
       return;
     }
+    touchWaiter(session);
     // Claim by rename before reading. The app writes the inbox atomically, but
     // read-then-delete still lets a second delivery land between the two and
     // be removed unread. Renaming takes the payload out of the path the app
@@ -266,6 +267,17 @@ function claimWaiter(session) {
   fs.writeFileSync(waiterPath(session), String(process.pid));
 }
 
+/** The lease's mtime is when this review was last listened to: `status` ages
+ * it from there, so a wait parked for days still counts as recent. */
+function touchWaiter(session) {
+  const now = new Date();
+  try {
+    fs.utimesSync(waiterPath(session), now, now);
+  } catch {
+    // lease gone: the next claim recreates it
+  }
+}
+
 /** A missing or half-written lease reads as still ours: only another pid on
  * file means a newer wait took over. */
 function waiterIsMine(session) {
@@ -279,9 +291,9 @@ function waiterIsMine(session) {
 
 const OPEN_REVIEW_MS = 7 * 24 * 60 * 60_000;
 
-/** The current branch's review, if it is still open: a wait was parked on it
- * within the last week, or notes sit in its inbox. The app never says a review
- * closed, so age is the only end. `--hook` prints the SessionStart context
+/** The current branch's review, if it needs a wait re-armed: nothing is
+ * listening, and either notes sit in its inbox or a wait listened within the
+ * last week. The app never says a review closed, so age is the only end. `--hook` prints the SessionStart context
  * instead of JSON, and nothing at all when there is nothing to re-arm. */
 function status(argv) {
   let session, head;
@@ -310,8 +322,22 @@ function status(argv) {
 function reviewState(session) {
   const notesWaiting = fs.existsSync(inboxPath(session));
   const lease = fs.statSync(waiterPath(session), { throwIfNoEntry: false });
-  const open = notesWaiting || (lease != null && Date.now() - lease.mtimeMs < OPEN_REVIEW_MS);
+  const recent = lease != null && Date.now() - lease.mtimeMs < OPEN_REVIEW_MS;
+  const open = !waiterAlive(session) && (notesWaiting || recent);
   return { open, notesWaiting };
+}
+
+/** A live wait (this session's, or another one's on the same branch) already
+ * owns the notes: re-arming would only take them away from it. */
+function waiterAlive(session) {
+  try {
+    const pid = Number(fs.readFileSync(waiterPath(session), 'utf8'));
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';
+  }
 }
 
 /** Minutes of waiting hinge on this, so anything that is not a finite positive
@@ -434,8 +460,14 @@ function selftest() {
     assert.equal(waiterIsMine(ws), true);
     fs.writeFileSync(waiterPath(ws), String(process.pid + 1));
     assert.equal(waiterIsMine(ws), false);
-    // A review is open while its lease is fresh or notes wait; a week idle ends it.
+    // A review needs re-arming while its lease is fresh or notes wait, unless a
+    // live wait holds it; a week idle ends it.
+    const deadPid = String(2 ** 31 - 1);
+    fs.writeFileSync(waiterPath(ws), deadPid);
     assert.deepEqual(reviewState(ws), { open: true, notesWaiting: false });
+    fs.writeFileSync(waiterPath(ws), String(process.pid));
+    assert.equal(reviewState(ws).open, false);
+    fs.writeFileSync(waiterPath(ws), deadPid);
     const old = new Date(Date.now() - OPEN_REVIEW_MS - 1000);
     fs.utimesSync(waiterPath(ws), old, old);
     assert.equal(reviewState(ws).open, false);
