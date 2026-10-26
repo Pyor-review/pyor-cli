@@ -21,17 +21,19 @@ hand it to Pyor; Pyor renders it through its normal review UI.
 
 Every step calls the `pyor-review` CLI, which does the deterministic parts (git
 resolution, the working-tree revision token that must match the app, the deep
-link, the feedback inbox). Run it without installing:
+link, the feedback inbox). Run the copy that ships with this skill when there
+is one, so the skill and the CLI stay on the same version:
 
-```bash
-npx -y pyor-review <args>
-```
+- **Installed as the Pyor Claude Code plugin** (`../../scripts/pyor-ai-review.mjs`
+  exists relative to this skill's directory):
+  `node "<skill dir>/../../scripts/pyor-ai-review.mjs" <args>`, and
+  `node "<skill dir>/../../scripts/pyor-local-review.mjs"` for the plain open.
+- **Anywhere else**, from npm at this skill's version:
+  `npx -y pyor-review@0.7.0 <args>`, and
+  `npx -y --package pyor-review@0.7.0 pyor-local-review` for the plain open.
 
-(Not yet on npm? Run it straight from the repo instead:
-`npx -y --package github:Pyor-review/pyor-cli pyor-review <args>`.)
-
-Below, `pyor-review` is shorthand for that command. Only `git` and `node` are
-required on the PATH.
+Below, `pyor-review` and `pyor-local-review` are shorthand for those commands.
+Only `git` and `node` are required on the PATH.
 
 ## Arguments (optional)
 
@@ -44,7 +46,7 @@ required on the PATH.
 If the argument is `plain` or `fast`, skip the AI flow — open a plain review:
 
 ```bash
-npx -y --package pyor-review pyor-local-review
+pyor-local-review
 ```
 
 If it exits non-zero saying Pyor is not installed, relay its message: the user
@@ -210,8 +212,9 @@ bounded wait. If you can't run background commands, run it in the foreground.
   session's notes, so this one stepped aside: do not re-arm it.
 
 A restart ends a parked `wait`. At the start of a new session, run
-`pyor-review status`: when it reports `open:true` (nothing is listening on this
-branch's review), re-arm `wait` on its `sessionId` before anything else. (The Claude Code plugin's SessionStart
+`pyor-review status`. It lists the `reviews` nothing is listening on, in this
+repo or any repo below the current folder: re-arm a `wait` on each one's
+`session` before anything else. (The Claude Code plugin's SessionStart
 hook runs this for you and says so in the session context; act on it first.)
 
 ## 6. Reply to each note

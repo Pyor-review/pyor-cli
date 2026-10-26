@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Keeps the plugin + marketplace manifests on package.json's version. Run by
-// the `version` lifecycle, so `npm version <x>` bumps all three and tags once.
+// Keeps the plugin + marketplace manifests, and the skill's pinned npx
+// version, on package.json's version. Run by the `version` lifecycle, so
+// `npm version <x>` bumps them all and tags once.
 import fs from 'node:fs';
 
 const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
@@ -18,4 +19,10 @@ write('.claude-plugin/marketplace.json', (m) => {
   m.metadata.version = version;
 });
 
-console.log(`synced plugin + marketplace manifests to ${version}`);
+const skill = 'plugins/pyor/skills/pyor-review/SKILL.md';
+fs.writeFileSync(
+  skill,
+  fs.readFileSync(skill, 'utf8').replaceAll(/pyor-review@\d+\.\d+\.\d+/g, `pyor-review@${version}`),
+);
+
+console.log(`synced manifests and skill to ${version}`);

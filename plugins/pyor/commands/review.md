@@ -220,8 +220,9 @@ free while it idles. Pass `--timeout <seconds>` if you want a bounded one.
   session's notes, so this one stepped aside: do **not** re-arm it.
 
 A restart ends the parked `wait`. When a session starts and nothing is listening
-on this branch's review, the plugin's SessionStart hook says so in the session
-context: when it does, re-arm `wait` on that `sessionId` first thing.
+on a review in this repo, or in any repo below the session's folder, the
+plugin's SessionStart hook lists it in the session context: when it does,
+re-arm a `wait` on each listed session first thing.
 
 Because `sessionId` is stable per review (step 1), re-running `prepare` mid-flow
 (e.g. after fixing a launch issue) does **not** orphan a parked `wait` — it's the

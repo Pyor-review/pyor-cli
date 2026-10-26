@@ -127,6 +127,17 @@ export function computeSessionId(repo, head, base) {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
+/** Which repo and branch a session reviews, so `status` can find the review
+ * from a folder above the repo. */
+export function reviewPath(sessionId) {
+  return path.join(pyorDir(), 'reviews', `${sessionId}.json`);
+}
+
+export function recordReview({ session, repo, head }) {
+  fs.mkdirSync(path.dirname(reviewPath(session)), { recursive: true });
+  fs.writeFileSync(reviewPath(session), JSON.stringify({ session, repo, head }));
+}
+
 export function inboxPath(sessionId) {
   return path.join(pyorDir(), 'inbox', `${sessionId}.json`);
 }

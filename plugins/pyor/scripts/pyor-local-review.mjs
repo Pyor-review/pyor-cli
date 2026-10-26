@@ -26,6 +26,7 @@ import {
   computeSessionId,
   readReviewContext,
   reviewContextPath,
+  recordReview,
 } from './lib.mjs';
 
 function selftest() {
@@ -81,6 +82,7 @@ function main() {
   console.log(`Opening Pyor local review: ${head} vs ${base}`);
   console.log(`session ${session}`);
   try {
+    recordReview({ session, repo, head });
     openUrl(url);
   } catch (e) {
     console.error(`Could not open Pyor: ${e.message}`);
