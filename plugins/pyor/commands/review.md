@@ -219,6 +219,10 @@ free while it idles. Pass `--timeout <seconds>` if you want a bounded one.
   re-run, or another session on this branch). Only one `wait` consumes a
   session's notes, so this one stepped aside: do **not** re-arm it.
 
+A restart, resume, or compaction kills the parked `wait`. The plugin's
+SessionStart hook notices the branch's review is still open and says so in the
+session context: when it does, re-arm `wait` on that `sessionId` first thing.
+
 Because `sessionId` is stable per review (step 1), re-running `prepare` mid-flow
 (e.g. after fixing a launch issue) does **not** orphan a parked `wait` — it's the
 same session.

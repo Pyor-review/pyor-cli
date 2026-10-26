@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs\" status --hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

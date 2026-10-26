@@ -209,6 +209,11 @@ bounded wait. If you can't run background commands, run it in the foreground.
   re-run, or another agent session on this branch). Only one `wait` consumes a
   session's notes, so this one stepped aside: do not re-arm it.
 
+A restart, resume, or compaction kills a parked `wait`. At the start of a new
+session, run `pyor-review status`: when it reports `open:true`, re-arm `wait` on
+its `sessionId` before anything else. (The Claude Code plugin's SessionStart
+hook runs this for you and says so in the session context; act on it first.)
+
 ## 6. Reply to each note
 
 Every note in `commentsMarkdown` carries an `id:` in its heading. Answer it back

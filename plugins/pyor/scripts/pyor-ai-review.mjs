@@ -13,6 +13,8 @@
 //              review failed, while the panel is still working.
 //   wait     → park, polling ~/.pyor/inbox/<session>.json for the comments the
 //              reviewer sends back, and print them once they arrive.
+//   status   → whether this branch's review is still open, so a new or
+//              compacted session can re-arm its wait (the SessionStart hook).
 //
 // The agent orchestrates: prepare → open → (generate aids, progress after each
 // reviewer) → open --aids → wait. See commands/review.md.
@@ -234,7 +236,6 @@ async function wait(argv) {
     try {
       const raw = fs.readFileSync(claimed, 'utf8');
       fs.rmSync(claimed, { force: true });
-      fs.rmSync(waiterPath(session), { force: true });
       out({ ok: true, status: 'received', feedback: JSON.parse(raw) });
       return;
     } catch {
@@ -254,7 +255,8 @@ async function wait(argv) {
 
 /** The waiter lease: the pid of the one `wait` allowed to consume this
  * session's inbox. The newest wait always takes it, so a stale one (its session
- * closed, or the command re-run) steps aside instead of competing. */
+ * closed, or the command re-run) steps aside instead of competing. It outlives
+ * its wait on purpose: `status` reads it as "this review was being listened to". */
 function waiterPath(session) {
   return `${inboxPath(session)}.waiter`;
 }
@@ -273,6 +275,43 @@ function waiterIsMine(session) {
   } catch {
     return true;
   }
+}
+
+const OPEN_REVIEW_MS = 7 * 24 * 60 * 60_000;
+
+/** The current branch's review, if it is still open: a wait was parked on it
+ * within the last week, or notes sit in its inbox. The app never says a review
+ * closed, so age is the only end. `--hook` prints the SessionStart context
+ * instead of JSON, and nothing at all when there is nothing to re-arm. */
+function status(argv) {
+  let session, head;
+  try {
+    const resolved = resolveRepoHead(process.cwd());
+    head = resolved.head;
+    session = computeSessionId(resolved.repo, head, resolveBase(resolved.repo, head));
+  } catch {
+    if (!argv.includes('--hook')) out({ ok: true, open: false });
+    return;
+  }
+  const { open, notesWaiting } = reviewState(session);
+  if (!argv.includes('--hook')) {
+    out({ ok: true, open, sessionId: session, head, notesWaiting });
+    return;
+  }
+  if (!open) return;
+  const script = process.argv[1];
+  process.stdout.write(
+    `Pyor review ${session} on ${head} is still open${notesWaiting ? ', with reviewer notes waiting' : ''}. ` +
+      `Before anything else, re-arm it: run \`node "${script}" wait --session ${session}\` as a background command, ` +
+      'then handle what it returns as /pyor:review steps 5 and 6 describe (answer each note with `reply`, then park a fresh wait).\n',
+  );
+}
+
+function reviewState(session) {
+  const notesWaiting = fs.existsSync(inboxPath(session));
+  const lease = fs.statSync(waiterPath(session), { throwIfNoEntry: false });
+  const open = notesWaiting || (lease != null && Date.now() - lease.mtimeMs < OPEN_REVIEW_MS);
+  return { open, notesWaiting };
 }
 
 /** Minutes of waiting hinge on this, so anything that is not a finite positive
@@ -395,6 +434,14 @@ function selftest() {
     assert.equal(waiterIsMine(ws), true);
     fs.writeFileSync(waiterPath(ws), String(process.pid + 1));
     assert.equal(waiterIsMine(ws), false);
+    // A review is open while its lease is fresh or notes wait; a week idle ends it.
+    assert.deepEqual(reviewState(ws), { open: true, notesWaiting: false });
+    const old = new Date(Date.now() - OPEN_REVIEW_MS - 1000);
+    fs.utimesSync(waiterPath(ws), old, old);
+    assert.equal(reviewState(ws).open, false);
+    fs.writeFileSync(inboxPath(ws), '{}');
+    assert.deepEqual(reviewState(ws), { open: true, notesWaiting: true });
+    assert.equal(reviewState(computeSessionId('/selftest', 'b/none', 'main')).open, false);
     // Progress accumulates hints, and never overwrites a finished hand-off.
     const ps = computeSessionId('/selftest', 'b/progress', 'main');
     const lens = path.join(sandbox, 'lens.json');
@@ -431,9 +478,10 @@ else if (cmd === 'open') open(argv);
 else if (cmd === 'progress') progress(argv);
 else if (cmd === 'reply') reply(argv);
 else if (cmd === 'wait') await wait(argv);
+else if (cmd === 'status') status(argv);
 else {
   process.stderr.write(
-    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|--selftest\n',
+    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|status|--selftest\n',
   );
   process.exitCode = 1;
 }
