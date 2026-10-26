@@ -82,8 +82,12 @@ the session's topic/goal, not the branch name (e.g. "Fix promo-code expiry").
 
 ```bash
 pyor-review open --session <sessionId> \
-  --repo <repo> --head <head> --base <base> --title "<short title>"
+  --repo <repo> --head <head> --base <base> --title "<short title>" \
+  --agent <you>
 ```
+
+`--agent` is your own name in lowercase (`codex`, `cursor`, `gemini`), so Pyor
+can say who is working on a note. Pass it on every `open`.
 
 Without `--aids`, Pyor opens on the diff and shows "Claude is reviewing" until
 the hand-off lands (step 4). Tell the user the review is open and filling in
@@ -179,7 +183,7 @@ Write it to a temp file (`mktemp`), shaped exactly:
 pyor-review open \
   --aids <tempfile> --session <sessionId> \
   --repo <repo> --head <head> --base <base> \
-  --title "<short title>"
+  --title "<short title>" --agent <you>
 ```
 
 This replaces the streamed hints with the merged set and adds the grouping.

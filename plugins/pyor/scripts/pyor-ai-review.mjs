@@ -103,6 +103,7 @@ function open(argv) {
   const head = flag(argv, 'head');
   const base = flag(argv, 'base');
   const title = flag(argv, 'title');
+  const agent = flag(argv, 'agent');
   if (!session || !repo || !head || !base) {
     out({ ok: false, error: 'open needs --session --repo --head --base' });
     process.exitCode = 1;
@@ -124,7 +125,7 @@ function open(argv) {
     process.exitCode = 1;
     return;
   }
-  const url = buildDeepLink({ path: repo, head, base, aids, session, title });
+  const url = buildDeepLink({ path: repo, head, base, aids, session, title, agent });
   try {
     recordReview({ session, repo, head });
     openUrl(url);
@@ -468,11 +469,13 @@ function selftest() {
     base: 'main',
     aids: '/tmp/a.json',
     session: 'abc',
+    agent: 'codex',
   });
   const u = new URL(url);
   assert.equal(u.searchParams.get('path'), '/r');
   assert.equal(u.searchParams.get('aids'), '/tmp/a.json');
   assert.equal(u.searchParams.get('session'), 'abc');
+  assert.equal(u.searchParams.get('agent'), 'codex');
   // computeRevision against this very repo returns "<sha>:<tree>".
   const rev = computeRevision(process.cwd());
   assert.match(rev, /^[0-9a-f]{7,40}(:[0-9a-f]{7,40})?$/i);
