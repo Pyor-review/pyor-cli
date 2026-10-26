@@ -13,6 +13,8 @@
 //              review failed, while the panel is still working.
 //   wait     → park, polling ~/.pyor/inbox/<session>.json for the comments the
 //              reviewer sends back, and print them once they arrive.
+//   status   → whether this branch's review is still open, so a new or
+//              compacted session can re-arm its wait (the SessionStart hook).
 //
 // The agent orchestrates: prepare → open → (generate aids, progress after each
 // reviewer) → open --aids → wait. See commands/review.md.
@@ -221,6 +223,7 @@ async function wait(argv) {
       out({ ok: true, status: 'superseded' });
       return;
     }
+    touchWaiter(session);
     // Claim by rename before reading. The app writes the inbox atomically, but
     // read-then-delete still lets a second delivery land between the two and
     // be removed unread. Renaming takes the payload out of the path the app
@@ -234,7 +237,6 @@ async function wait(argv) {
     try {
       const raw = fs.readFileSync(claimed, 'utf8');
       fs.rmSync(claimed, { force: true });
-      fs.rmSync(waiterPath(session), { force: true });
       out({ ok: true, status: 'received', feedback: JSON.parse(raw) });
       return;
     } catch {
@@ -254,7 +256,8 @@ async function wait(argv) {
 
 /** The waiter lease: the pid of the one `wait` allowed to consume this
  * session's inbox. The newest wait always takes it, so a stale one (its session
- * closed, or the command re-run) steps aside instead of competing. */
+ * closed, or the command re-run) steps aside instead of competing. It outlives
+ * its wait on purpose: `status` reads it as "this review was being listened to". */
 function waiterPath(session) {
   return `${inboxPath(session)}.waiter`;
 }
@@ -262,6 +265,17 @@ function waiterPath(session) {
 function claimWaiter(session) {
   fs.mkdirSync(path.dirname(waiterPath(session)), { recursive: true });
   fs.writeFileSync(waiterPath(session), String(process.pid));
+}
+
+/** The lease's mtime is when this review was last listened to: `status` ages
+ * it from there, so a wait parked for days still counts as recent. */
+function touchWaiter(session) {
+  const now = new Date();
+  try {
+    fs.utimesSync(waiterPath(session), now, now);
+  } catch {
+    // lease gone: the next claim recreates it
+  }
 }
 
 /** A missing or half-written lease reads as still ours: only another pid on
@@ -272,6 +286,57 @@ function waiterIsMine(session) {
     return Number.isNaN(pid) || pid === process.pid;
   } catch {
     return true;
+  }
+}
+
+const OPEN_REVIEW_MS = 7 * 24 * 60 * 60_000;
+
+/** The current branch's review, if it needs a wait re-armed: nothing is
+ * listening, and either notes sit in its inbox or a wait listened within the
+ * last week. The app never says a review closed, so age is the only end. `--hook` prints the SessionStart context
+ * instead of JSON, and nothing at all when there is nothing to re-arm. */
+function status(argv) {
+  let session, head;
+  try {
+    const resolved = resolveRepoHead(process.cwd());
+    head = resolved.head;
+    session = computeSessionId(resolved.repo, head, resolveBase(resolved.repo, head));
+  } catch {
+    if (!argv.includes('--hook')) out({ ok: true, open: false });
+    return;
+  }
+  const { open, notesWaiting } = reviewState(session);
+  if (!argv.includes('--hook')) {
+    out({ ok: true, open, sessionId: session, head, notesWaiting });
+    return;
+  }
+  if (!open) return;
+  const script = process.argv[1];
+  process.stdout.write(
+    `Pyor review ${session} on ${head} is still open${notesWaiting ? ', with reviewer notes waiting' : ''}. ` +
+      `Before anything else, re-arm it: run \`node "${script}" wait --session ${session}\` as a background command, ` +
+      'then handle what it returns as /pyor:review steps 5 and 6 describe (answer each note with `reply`, then park a fresh wait).\n',
+  );
+}
+
+function reviewState(session) {
+  const notesWaiting = fs.existsSync(inboxPath(session));
+  const lease = fs.statSync(waiterPath(session), { throwIfNoEntry: false });
+  const recent = lease != null && Date.now() - lease.mtimeMs < OPEN_REVIEW_MS;
+  const open = !waiterAlive(session) && (notesWaiting || recent);
+  return { open, notesWaiting };
+}
+
+/** A live wait (this session's, or another one's on the same branch) already
+ * owns the notes: re-arming would only take them away from it. */
+function waiterAlive(session) {
+  try {
+    const pid = Number(fs.readFileSync(waiterPath(session), 'utf8'));
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';
   }
 }
 
@@ -395,6 +460,20 @@ function selftest() {
     assert.equal(waiterIsMine(ws), true);
     fs.writeFileSync(waiterPath(ws), String(process.pid + 1));
     assert.equal(waiterIsMine(ws), false);
+    // A review needs re-arming while its lease is fresh or notes wait, unless a
+    // live wait holds it; a week idle ends it.
+    const deadPid = String(2 ** 31 - 1);
+    fs.writeFileSync(waiterPath(ws), deadPid);
+    assert.deepEqual(reviewState(ws), { open: true, notesWaiting: false });
+    fs.writeFileSync(waiterPath(ws), String(process.pid));
+    assert.equal(reviewState(ws).open, false);
+    fs.writeFileSync(waiterPath(ws), deadPid);
+    const old = new Date(Date.now() - OPEN_REVIEW_MS - 1000);
+    fs.utimesSync(waiterPath(ws), old, old);
+    assert.equal(reviewState(ws).open, false);
+    fs.writeFileSync(inboxPath(ws), '{}');
+    assert.deepEqual(reviewState(ws), { open: true, notesWaiting: true });
+    assert.equal(reviewState(computeSessionId('/selftest', 'b/none', 'main')).open, false);
     // Progress accumulates hints, and never overwrites a finished hand-off.
     const ps = computeSessionId('/selftest', 'b/progress', 'main');
     const lens = path.join(sandbox, 'lens.json');
@@ -431,9 +510,10 @@ else if (cmd === 'open') open(argv);
 else if (cmd === 'progress') progress(argv);
 else if (cmd === 'reply') reply(argv);
 else if (cmd === 'wait') await wait(argv);
+else if (cmd === 'status') status(argv);
 else {
   process.stderr.write(
-    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|--selftest\n',
+    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|status|--selftest\n',
   );
   process.exitCode = 1;
 }
