@@ -95,8 +95,8 @@ Subcommands: `prepare` (resolve repo/head/base + a deterministic session id +
 revision + the exported review context), `open` (fire the deep link: at once
 on a live review, then again with the finished aids), `progress` (stream hints
 into the live review while the panel works), `wait` (park for "Send to Claude"
-feedback), `reply` (answer a note), `status` (is this branch's review still
-open). `pyor-local-review` is the
+feedback), `reply` (answer a note), `status` (which reviews here or below
+have nothing listening). `pyor-local-review` is the
 plain, no-AI open.
 
 ## Development

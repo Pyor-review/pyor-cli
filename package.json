@@ -17,7 +17,7 @@
   "scripts": {
     "test": "node plugins/pyor/scripts/pyor-ai-review.mjs --selftest && node plugins/pyor/scripts/pyor-local-review.mjs --selftest",
     "prepublishOnly": "npm test",
-    "version": "node scripts/sync-version.mjs && git add plugins/pyor/.claude-plugin/plugin.json .claude-plugin/marketplace.json"
+    "version": "node scripts/sync-version.mjs && git add plugins/pyor/.claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/pyor/skills/pyor-review/SKILL.md"
   },
   "keywords": [
     "pyor",

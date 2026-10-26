@@ -38,6 +38,8 @@ import {
   appendReplyOp,
   repliesPath,
   acquireLock,
+  recordReview,
+  reviewPath,
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
 
@@ -124,6 +126,7 @@ function open(argv) {
   }
   const url = buildDeepLink({ path: repo, head, base, aids, session, title });
   try {
+    recordReview({ session, repo, head });
     openUrl(url);
     out({ ok: true, url });
   } catch (e) {
@@ -291,38 +294,85 @@ function waiterIsMine(session) {
 
 const OPEN_REVIEW_MS = 7 * 24 * 60 * 60_000;
 
-/** The current branch's review, if it needs a wait re-armed: nothing is
- * listening, and either notes sit in its inbox or a wait listened within the
- * last week. The app never says a review closed, so age is the only end. `--hook` prints the SessionStart context
- * instead of JSON, and nothing at all when there is nothing to re-arm. */
+/** The reviews that need a wait re-armed: the cwd's own branch, plus every
+ * recorded review in a repo below the cwd, so a session started in a folder of
+ * repos still finds them. `--hook` prints the SessionStart context instead of
+ * JSON, and nothing at all when there is nothing to re-arm. */
 function status(argv) {
-  let session, head;
-  try {
-    const resolved = resolveRepoHead(process.cwd());
-    head = resolved.head;
-    session = computeSessionId(resolved.repo, head, resolveBase(resolved.repo, head));
-  } catch {
-    if (!argv.includes('--hook')) out({ ok: true, open: false });
-    return;
-  }
-  const { open, notesWaiting } = reviewState(session);
+  const reviews = openReviews(process.cwd());
   if (!argv.includes('--hook')) {
-    out({ ok: true, open, sessionId: session, head, notesWaiting });
+    out({ ok: true, reviews });
     return;
   }
-  if (!open) return;
+  if (reviews.length === 0) return;
   const script = process.argv[1];
+  const lines = reviews.map(
+    (r) =>
+      `- ${r.session}: ${r.repo} on ${r.head}${r.notesWaiting ? ', reviewer notes waiting' : ''}. ` +
+      `Re-arm: \`node "${script}" wait --session ${r.session}\``,
+  );
   process.stdout.write(
-    `Pyor review ${session} on ${head} is still open${notesWaiting ? ', with reviewer notes waiting' : ''}. ` +
-      `Before anything else, re-arm it: run \`node "${script}" wait --session ${session}\` as a background command, ` +
-      'then handle what it returns as /pyor:review steps 5 and 6 describe (answer each note with `reply`, then park a fresh wait).\n',
+    `Pyor reviews still open with nothing listening:\n${lines.join('\n')}\n` +
+      'Before anything else, run each re-arm command as its own background command, then handle what it ' +
+      'returns as /pyor:review steps 5 and 6 describe (answer each note with `reply`, then park a fresh wait).\n',
   );
 }
 
+function openReviews(cwd) {
+  const candidates = new Map();
+  try {
+    const { repo, head } = resolveRepoHead(cwd);
+    const session = computeSessionId(repo, head, resolveBase(repo, head));
+    candidates.set(session, { session, repo, head });
+  } catch {
+    // not inside a repo: only the recorded reviews below can match
+  }
+  const root = realpathOr(cwd);
+  listReviews()
+    .filter((r) => r.repo === root || r.repo.startsWith(root + path.sep))
+    .forEach((r) => candidates.set(r.session, r));
+  return [...candidates.values()]
+    .map((r) => ({ ...r, ...reviewState(r.session) }))
+    .filter((r) => r.open)
+    .map(({ open, ...r }) => r);
+}
+
+/** Recorded reviews, pruning any untouched for longer than a review stays open. */
+function listReviews() {
+  const dir = path.dirname(reviewPath('x'));
+  const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith('.json')) : [];
+  return names.flatMap((name) => {
+    const file = path.join(dir, name);
+    try {
+      if (Date.now() - fs.statSync(file).mtimeMs >= OPEN_REVIEW_MS) {
+        fs.rmSync(file, { force: true });
+        return [];
+      }
+      const { session, repo, head } = JSON.parse(fs.readFileSync(file, 'utf8'));
+      return session && repo ? [{ session, repo, head }] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function realpathOr(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
+/** Open = nothing is listening, and notes wait in the inbox or the review saw
+ * activity (opened, or a wait listening) within the last week. The app never
+ * says a review closed, so age is the only end. */
 function reviewState(session) {
   const notesWaiting = fs.existsSync(inboxPath(session));
-  const lease = fs.statSync(waiterPath(session), { throwIfNoEntry: false });
-  const recent = lease != null && Date.now() - lease.mtimeMs < OPEN_REVIEW_MS;
+  const recent = [waiterPath(session), reviewPath(session), aidsPath(session)].some((file) => {
+    const stat = fs.statSync(file, { throwIfNoEntry: false });
+    return stat != null && Date.now() - stat.mtimeMs < OPEN_REVIEW_MS;
+  });
   const open = !waiterAlive(session) && (notesWaiting || recent);
   return { open, notesWaiting };
 }
@@ -474,6 +524,17 @@ function selftest() {
     fs.writeFileSync(inboxPath(ws), '{}');
     assert.deepEqual(reviewState(ws), { open: true, notesWaiting: true });
     assert.equal(reviewState(computeSessionId('/selftest', 'b/none', 'main')).open, false);
+    // A review recorded in a repo below the cwd is found from the parent folder,
+    // not from a sibling that shares its prefix, and is pruned once stale.
+    const parent = fs.realpathSync(sandbox);
+    const app = path.join(parent, 'app');
+    const child = computeSessionId(app, 'b/child', 'main');
+    recordReview({ session: child, repo: app, head: 'b/child' });
+    assert.deepEqual(openReviews(parent).map((r) => r.session), [child]);
+    assert.deepEqual(openReviews(path.join(parent, 'app-other')), []);
+    fs.utimesSync(reviewPath(child), old, old);
+    assert.deepEqual(openReviews(parent), []);
+    assert.equal(fs.existsSync(reviewPath(child)), false);
     // Progress accumulates hints, and never overwrites a finished hand-off.
     const ps = computeSessionId('/selftest', 'b/progress', 'main');
     const lens = path.join(sandbox, 'lens.json');
