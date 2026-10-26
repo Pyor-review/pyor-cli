@@ -34,8 +34,8 @@ If it exits non-zero saying Pyor is not installed, relay its message: the user
 runs the install command themselves (**never run it for them**), launches Pyor
 once, and re-runs. Otherwise tell the user the review is opening in Pyor (head
 vs base, as printed) with no AI review. Skipping the panel skips the *analysis*, not the round-trip: the
-script prints a `session <id>` line, so **park a background wait on it** (step 4)
-and answer whatever they send with `reply` (step 5). Then stop — do not run the
+script prints a `session <id>` line, so **park a background wait on it** (step 5)
+and answer whatever they send with `reply` (step 6). Then stop — do not run the
 panel. Otherwise, run the AI flow below in order.
 
 ## 1. Prepare
@@ -63,7 +63,25 @@ Parse the JSON on stdout.
   **stable per review** — re-running `prepare` for the same repo/head/base
   returns the same id, so a `wait` you already parked stays valid.
 
-## 2. Generate the aids (delegate to a fresh panel)
+## 2. Open in Pyor now
+
+Open the review **before** the panel runs, so the reviewer watches it happen
+instead of waiting. Give it a short human **title** (≤ ~8 words) describing
+what this session is about: its topic/goal, not the branch name (e.g.
+"Session-authored review aids" or "Fix promo-code expiry"). Pyor shows it
+instead of the raw branch slug.
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" open \
+  --session <sessionId> --repo <repo> --head <head> --base <base> \
+  --title "<short session title>"
+```
+
+Without `--aids`, Pyor opens on the diff and shows "Claude is reviewing" in the
+toolbar and the runs dock until the hand-off lands (step 4). Tell the user the
+review is open and filling in live.
+
+## 3. Generate the aids (delegate to a fresh panel)
 
 Launch the sub-agents below with the **Task tool**. A Task sub-agent gets a
 clean context window — it does NOT inherit this conversation. **Keep it that
@@ -78,7 +96,7 @@ files as needed) and return ONLY the JSON. Run the hint reviewers in parallel
 Substitute the real values (`<base>`, `<head>`, `<repo>`, `context.*`) into each
 sub-agent's prompt before launching.
 
-### 2a. Hints — a 3-lens review panel
+### 3a. Hints — a 3-lens review panel
 
 Launch **three** fresh reviewers. Each gets `context.hintsSystem` **verbatim as
 its system guidance** (it owns the schema, caps, taxonomy, in-hunk anchoring,
@@ -107,13 +125,30 @@ Anchor rule (state it to each): anchor every hint to a NEW-side line INSIDE a
 changed hunk — the diff collapses unchanged regions, so an out-of-hunk anchor is
 hidden and wasted.
 
+**Stream each reviewer as it returns.** The moment one reviewer's JSON comes
+back, write it to a temp file (`mktemp`) and push it to the open review, so its
+hints appear in the diff while the others are still reading:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" progress \
+  --session <sessionId> --hints <that reviewer's tempfile>
+```
+
+If the panel fails and you will not hand anything off, say so instead, so the
+review stops showing a run that is never coming:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" progress \
+  --session <sessionId> --failed "<one-line reason>"
+```
+
 **Merge (mechanical, you do it — no code context needed):** concatenate the
 three hint arrays; **dedupe** — when two hints share the same `path` + `line` (or
 are clearly the same issue), keep one (highest severity, most specific body);
 then **cap to the contract**: at most **3 per file** and **12 total**, keeping
 highest severity first. That merged array is `hints`.
 
-### 2b. Grouping — one fresh agent
+### 3b. Grouping — one fresh agent
 
 Launch **one** fresh agent with `context.grouping[intent]` as its system guidance
 (for `custom`, take `context.grouping.customTemplate` and replace
@@ -126,7 +161,7 @@ Launch **one** fresh agent with `context.grouping[intent]` as its system guidanc
                 "files": [str] } ] }   // exact diff paths; every changed file in exactly one group
 ```
 
-### 2c. Assemble the hand-off
+### 3c. Assemble the hand-off
 
 Write it to a temp file (use `mktemp`), shaped exactly:
 ```json
@@ -140,12 +175,7 @@ Write it to a temp file (use `mktemp`), shaped exactly:
 }
 ```
 
-## 3. Open in Pyor
-
-Give the review a short human **title** (≤ ~8 words) describing what this
-session is about — its topic/goal, not the branch name (e.g. "Session-authored
-review aids" or "Fix promo-code expiry"). Pass it as `--title`; Pyor shows it
-instead of the raw branch slug.
+## 4. Hand off to Pyor
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" open \
@@ -154,13 +184,14 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" open \
   --title "<short session title>"
 ```
 
-Then tell the user: the review is opening in Pyor (head vs base) with your
-grouping + hints pre-loaded. They can read it, leave comments, and click
-**"Send to Claude"** to send the comments back here. Mention the **Auto-send**
-toggle next to that button — with it on, each note they save is delivered the
-moment they save it, no click needed.
+This replaces the streamed hints with the merged set and adds the grouping.
+Then tell the user the review is ready (head vs base) with your grouping +
+hints. They can read it, leave comments, and click **"Send to Claude"** to send
+the comments back here. Mention the **Auto-send** toggle next to that button:
+with it on, each note they save is delivered the moment they save it, no click
+needed.
 
-## 4. Wait for feedback (park)
+## 5. Wait for feedback (park)
 
 Run `wait` **as a background command** (`run_in_background: true`). It blocks
 until the user's notes arrive, then exits with them — the task-completion
@@ -176,7 +207,7 @@ free while it idles. Pass `--timeout <seconds>` if you want a bounded one.
 
 - `status:"received"` — present the returned `feedback` (its `commentsMarkdown`
   is reviewer notes to address), act on them as the user directs, answer each one
-  with `reply` (step 5), and then **park a fresh `wait` on the same
+  with `reply` (step 6), and then **park a fresh `wait` on the same
   `sessionId`** — the reviewer is usually still reading, and their next note has
   nowhere to land without it.
 - `status:"pending"` — only possible when you passed `--timeout`. Re-arm another
@@ -192,7 +223,7 @@ Because `sessionId` is stable per review (step 1), re-running `prepare` mid-flow
 (e.g. after fixing a launch issue) does **not** orphan a parked `wait` — it's the
 same session.
 
-## 5. Reply to each note
+## 6. Reply to each note
 
 Every note in `commentsMarkdown` carries an `id:` in its heading. Once you have
 acted on one, answer it back into Pyor so the reply renders under the reviewer's

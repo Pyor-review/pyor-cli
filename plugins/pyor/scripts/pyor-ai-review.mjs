@@ -6,13 +6,16 @@
 //   prepare  → resolve repo/head/base + revision token + a session nonce, and
 //              hand back the review-context (base prompt + settings) the app
 //              exported. Exits early if the app isn't installed/launched.
-//   open     → write nothing; fire the pyor://local-review deep link carrying
-//              the aids file + the session nonce, launching/focusing Pyor.
+//   open     → fire the pyor://local-review deep link carrying the aids file +
+//              the session nonce, launching/focusing Pyor. Without --aids it
+//              opens at once on a live progress file the app follows.
+//   progress → stream a reviewer's hints into that live file, or mark the
+//              review failed, while the panel is still working.
 //   wait     → park, polling ~/.pyor/inbox/<session>.json for the comments the
 //              reviewer sends back, and print them once they arrive.
 //
-// The agent orchestrates: prepare → (generate aids, write temp file) → open →
-// wait. See commands/ai-review.md.
+// The agent orchestrates: prepare → open → (generate aids, progress after each
+// reviewer) → open --aids → wait. See commands/ai-review.md.
 
 import { strict as assert } from 'node:assert';
 import {
@@ -40,9 +43,12 @@ function out(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
 }
 
+/** The value after `--name`. Another flag is never a value: an empty shell
+ * variable must not let `--session` swallow the flag that follows it. */
 function flag(argv, name) {
   const i = argv.indexOf(`--${name}`);
-  return i >= 0 && i + 1 < argv.length ? argv[i + 1] : undefined;
+  const value = i >= 0 ? argv[i + 1] : undefined;
+  return value?.startsWith('--') ? undefined : value;
 }
 
 function prepare(argv) {
@@ -91,8 +97,8 @@ function open(argv) {
   const head = flag(argv, 'head');
   const base = flag(argv, 'base');
   const title = flag(argv, 'title');
-  if (!aidsIn || !session || !repo || !head || !base) {
-    out({ ok: false, error: 'open needs --aids --session --repo --head --base' });
+  if (!session || !repo || !head || !base) {
+    out({ ok: false, error: 'open needs --session --repo --head --base' });
     process.exitCode = 1;
     return;
   }
@@ -102,13 +108,11 @@ function open(argv) {
   // silently rejects the file and the review opens with no grouping/hints.
   // ~/.pyor is home-derived, so both sides agree. Parse first to fail loudly on
   // malformed aids instead of in the app.
-  let aids;
+  const aids = aidsPath(session);
   try {
-    const raw = fs.readFileSync(aidsIn, 'utf8');
+    const raw = aidsIn ? fs.readFileSync(aidsIn, 'utf8') : JSON.stringify({ progress: {} });
     JSON.parse(raw);
-    aids = aidsPath(session);
-    fs.mkdirSync(path.dirname(aids), { recursive: true });
-    fs.writeFileSync(aids, raw);
+    writeAids(session, raw);
   } catch (e) {
     out({ ok: false, error: `Unreadable or invalid aids file: ${e.message}` });
     process.exitCode = 1;
@@ -120,6 +124,48 @@ function open(argv) {
     out({ ok: true, url });
   } catch (e) {
     out({ ok: false, error: `Could not open Pyor: ${e.message}` });
+    process.exitCode = 1;
+  }
+}
+
+/** Write the aids file whole: the app polls it while the panel works. */
+function writeAids(session, raw) {
+  const file = aidsPath(session);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, raw);
+  fs.renameSync(tmp, file);
+}
+
+/** Add one reviewer's hints to the live progress file, or mark it failed. A
+ * finished hand-off already on file wins: progress never overwrites it. */
+function progress(argv) {
+  const session = flag(argv, 'session');
+  const hintsIn = flag(argv, 'hints');
+  const failed = flag(argv, 'failed');
+  if (!session || (!hintsIn && !failed)) {
+    out({ ok: false, error: 'progress needs --session and --hints or --failed' });
+    process.exitCode = 1;
+    return;
+  }
+  let current = {};
+  try {
+    current = JSON.parse(fs.readFileSync(aidsPath(session), 'utf8'));
+  } catch {
+    // no live file yet: start one
+  }
+  if (current.revision) {
+    out({ ok: true, status: 'finished' });
+    return;
+  }
+  try {
+    const live = current.progress ?? {};
+    const added = hintsIn ? JSON.parse(fs.readFileSync(hintsIn, 'utf8')).hints ?? [] : [];
+    const hints = [...(live.hints ?? []), ...added];
+    writeAids(session, JSON.stringify({ progress: { ...live, hints, ...(failed ? { failed } : {}) } }));
+    out({ ok: true, hints: hints.length });
+  } catch (e) {
+    out({ ok: false, error: `Could not record progress: ${e.message}` });
     process.exitCode = 1;
   }
 }
@@ -303,6 +349,9 @@ function selftest() {
   // Aids stage under ~/.pyor/aids (home-derived), not os.tmpdir() — so the app's
   // read gate accepts it even when a coding harness sandboxes TMPDIR.
   assert.ok(aidsPath('abc').endsWith(path.join('.pyor', 'aids', 'abc.json')));
+  // A missing value reads as missing, not as the next flag.
+  assert.equal(flag(['--session', '--hints', 'f'], 'session'), undefined);
+  assert.equal(flag(['--body', '-'], 'body'), '-');
   // wait holds with no deadline unless one is asked for; junk is rejected.
   assert.equal(parseTimeout(undefined), 0);
   assert.equal(parseTimeout('90'), 90_000);
@@ -324,6 +373,18 @@ function selftest() {
     assert.equal(waiterIsMine(ws), true);
     fs.writeFileSync(waiterPath(ws), String(process.pid + 1));
     assert.equal(waiterIsMine(ws), false);
+    // Progress accumulates hints, and never overwrites a finished hand-off.
+    const ps = computeSessionId('/selftest', 'b/progress', 'main');
+    const lens = path.join(sandbox, 'lens.json');
+    fs.writeFileSync(lens, JSON.stringify({ hints: [{ path: 'a', line: 1 }] }));
+    writeAids(ps, JSON.stringify({ progress: {} }));
+    progress(['--session', ps, '--hints', lens]);
+    progress(['--session', ps, '--hints', lens]);
+    const live = JSON.parse(fs.readFileSync(aidsPath(ps), 'utf8'));
+    assert.equal(live.progress.hints.length, 2);
+    writeAids(ps, JSON.stringify({ revision: 'r' }));
+    progress(['--session', ps, '--failed', 'late']);
+    assert.equal(JSON.parse(fs.readFileSync(aidsPath(ps), 'utf8')).revision, 'r');
     // The queue is written whole: no temp or lock file outlives the append.
     const leftovers = fs
       .readdirSync(path.dirname(repliesPath(rs)))
@@ -342,11 +403,12 @@ const cmd = argv[0];
 if (cmd === '--selftest') selftest();
 else if (cmd === 'prepare') prepare(argv);
 else if (cmd === 'open') open(argv);
+else if (cmd === 'progress') progress(argv);
 else if (cmd === 'reply') reply(argv);
 else if (cmd === 'wait') await wait(argv);
 else {
   process.stderr.write(
-    'usage: pyor-ai-review.mjs prepare|open|wait|reply|--selftest\n',
+    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|--selftest\n',
   );
   process.exitCode = 1;
 }
