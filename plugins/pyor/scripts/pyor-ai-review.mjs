@@ -40,21 +40,13 @@ import {
   acquireLock,
   recordReview,
   reviewPath,
+  flag,
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
 
 
 function out(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
-}
-
-/** The value after `--name`. A bare flag token is never a value, so a missing
- * value cannot swallow the flag that follows it; text such as a `--body` that
- * starts with dashes still reads as text. */
-function flag(argv, name) {
-  const i = argv.indexOf(`--${name}`);
-  const value = i >= 0 ? argv[i + 1] : undefined;
-  return value && /^--[a-z][a-z-]*$/.test(value) ? undefined : value;
 }
 
 function prepare(argv) {

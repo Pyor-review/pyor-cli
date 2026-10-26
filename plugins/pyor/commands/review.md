@@ -27,7 +27,7 @@ If the argument is `plain` or `fast`, do NOT run the panel — just open a plain
 review:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-local-review.mjs"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-local-review.mjs" --agent claude
 ```
 
 If it exits non-zero saying Pyor is not installed, relay its message: the user

@@ -206,6 +206,15 @@ export function acquireLock(lockPath, timeoutMs = 2000) {
   return () => fs.rmSync(lockPath, { force: true });
 }
 
+/** The value after `--name`. A bare flag token is never a value, so a missing
+ * value cannot swallow the flag that follows it; text such as a `--body` that
+ * starts with dashes still reads as text. */
+export function flag(argv, name) {
+  const i = argv.indexOf(`--${name}`);
+  const value = i >= 0 ? argv[i + 1] : undefined;
+  return value && /^--[a-z][a-z-]*$/.test(value) ? undefined : value;
+}
+
 export const INSTALL_CMD = 'curl -fsSL https://pyor.review/install.sh | sh';
 
 /** Read + parse ~/.pyor/review-context.json, or null if absent/unreadable.
