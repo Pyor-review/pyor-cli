@@ -29,8 +29,8 @@ is one, so the skill and the CLI stay on the same version:
   `node "<skill dir>/../../scripts/pyor-ai-review.mjs" <args>`, and
   `node "<skill dir>/../../scripts/pyor-local-review.mjs"` for the plain open.
 - **Anywhere else**, from npm at this skill's version:
-  `npx -y pyor-review@0.7.0 <args>`, and
-  `npx -y --package pyor-review@0.7.0 pyor-local-review` for the plain open.
+  `npx -y pyor-review@0.8.0 <args>`, and
+  `npx -y --package pyor-review@0.8.0 pyor-local-review` for the plain open.
 
 Below, `pyor-review` and `pyor-local-review` are shorthand for those commands.
 Only `git` and `node` are required on the PATH.
