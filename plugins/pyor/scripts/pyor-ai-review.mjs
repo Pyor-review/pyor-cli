@@ -41,6 +41,7 @@ import {
   recordReview,
   reviewPath,
   flag,
+  recordedAgent,
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
 
@@ -119,7 +120,7 @@ function open(argv) {
   }
   const url = buildDeepLink({ path: repo, head, base, aids, session, title, agent });
   try {
-    recordReview({ session, repo, head });
+    recordReview({ session, repo, head, agent });
     openUrl(url);
     out({ ok: true, url });
   } catch (e) {
@@ -433,7 +434,7 @@ function reply(argv) {
       commentId,
       body: body || null,
       addressed,
-      author: flag(argv, 'author') ?? 'claude',
+      author: flag(argv, 'author') ?? recordedAgent(session) ?? 'claude',
       createdAt: new Date().toISOString(),
     });
     out({ ok: true, queued, file: repliesPath(session) });
@@ -525,6 +526,9 @@ function selftest() {
     const app = path.join(parent, 'app');
     const child = computeSessionId(app, 'b/child', 'main');
     recordReview({ session: child, repo: app, head: 'b/child' });
+    // The agent `open` named is what an unattributed reply is signed with.
+    recordReview({ session: rs, repo: '/selftest', head: 'b/replies', agent: 'codex' });
+    assert.equal(recordedAgent(rs), 'codex');
     assert.deepEqual(openReviews(parent).map((r) => r.session), [child]);
     assert.deepEqual(openReviews(path.join(parent, 'app-other')), []);
     fs.utimesSync(reviewPath(child), old, old);

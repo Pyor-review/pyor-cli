@@ -68,7 +68,8 @@ function main() {
   }
   const base = resolveBase(repo, head);
   const session = computeSessionId(repo, head, base);
-  const url = buildDeepLink({ path: repo, head, base, session, agent: flag(argv, 'agent') });
+  const agent = flag(argv, 'agent');
+  const url = buildDeepLink({ path: repo, head, base, session, agent });
   if (argv.includes('--print')) {
     console.log(url);
     return;
@@ -84,7 +85,7 @@ function main() {
   console.log(`Opening Pyor local review: ${head} vs ${base}`);
   console.log(`session ${session}`);
   try {
-    recordReview({ session, repo, head });
+    recordReview({ session, repo, head, agent });
     openUrl(url);
   } catch (e) {
     console.error(`Could not open Pyor: ${e.message}`);

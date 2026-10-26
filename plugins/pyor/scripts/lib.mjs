@@ -129,14 +129,23 @@ export function computeSessionId(repo, head, base) {
 }
 
 /** Which repo and branch a session reviews, so `status` can find the review
- * from a folder above the repo. */
+ * from a folder above the repo, and which agent drives it. */
 export function reviewPath(sessionId) {
   return path.join(pyorDir(), 'reviews', `${sessionId}.json`);
 }
 
-export function recordReview({ session, repo, head }) {
+export function recordReview({ session, repo, head, agent }) {
   fs.mkdirSync(path.dirname(reviewPath(session)), { recursive: true });
-  fs.writeFileSync(reviewPath(session), JSON.stringify({ session, repo, head }));
+  fs.writeFileSync(reviewPath(session), JSON.stringify({ session, repo, head, agent }));
+}
+
+/** The agent `open` named for this session, so its replies carry that name. */
+export function recordedAgent(session) {
+  try {
+    return JSON.parse(fs.readFileSync(reviewPath(session), 'utf8')).agent;
+  } catch {
+    return undefined;
+  }
 }
 
 export function inboxPath(sessionId) {
