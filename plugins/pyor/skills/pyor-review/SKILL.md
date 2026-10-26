@@ -52,8 +52,8 @@ runs the install command themselves (never run it for them), launches Pyor once,
 and re-runs. Otherwise tell the user the review is opening (head vs base, as
 printed). Skipping the AI
 skips the *analysis*, not the round-trip: the script prints a `session <id>`
-line, so park a `wait` on it (step 4) and answer what they send with `reply`
-(step 5). Then stop — do not generate aids.
+line, so park a `wait` on it (step 5) and answer what they send with `reply`
+(step 6). Then stop — do not generate aids.
 
 ## 1. Prepare
 
@@ -72,7 +72,22 @@ Parse the JSON on stdout.
   **deterministic** for this repo+branch, so re-running prepare returns the same
   id and a review left open earlier can still receive feedback.
 
-## 2. Generate the aids
+## 2. Open in Pyor now
+
+Open the review **before** generating anything, so the reviewer watches it fill
+in instead of waiting. Give it a short human **title** (≤ ~8 words) describing
+the session's topic/goal, not the branch name (e.g. "Fix promo-code expiry").
+
+```bash
+pyor-review open --session <sessionId> \
+  --repo <repo> --head <head> --base <base> --title "<short title>"
+```
+
+Without `--aids`, Pyor opens on the diff and shows "Claude is reviewing" until
+the hand-off lands (step 4). Tell the user the review is open and filling in
+live.
+
+## 3. Generate the aids
 
 Produce two things from the diff: **grouping** (every changed file sorted into
 labelled folders) and **hints** (a few short pointers to risks). Gather the diff
@@ -88,7 +103,7 @@ agent, then merge their output. If it doesn't, generate the aids inline in one
 pass. Either way, feed each generator the relevant system prompt from `context`
 (below) and have it return **only** JSON.
 
-### 2a. Hints
+### 3a. Hints
 
 Use `context.hintsSystem` as the system guidance (it owns the schema, caps,
 taxonomy, in-hunk anchoring, and the never-post rule). Each hint:
@@ -107,12 +122,27 @@ taxonomy, in-hunk anchoring, and the never-post rule). Each hint:
 hunk** — the diff collapses unchanged regions, so an out-of-hunk anchor is hidden
 and wasted.
 
+**Stream as you go.** Each time a batch of hints is ready (one reviewer's
+output, or your own pass), write `{ "hints": [...] }` to a temp file and push it
+to the open review, so the hints appear in the diff right away:
+
+```bash
+pyor-review progress --session <sessionId> --hints <tempfile>
+```
+
+If generation fails and nothing will be handed off, report it so the review
+stops showing a run that is never coming:
+
+```bash
+pyor-review progress --session <sessionId> --failed "<one-line reason>"
+```
+
 If you ran a multi-lens panel: concatenate the arrays, **dedupe** (same
 `path`+`line`, or clearly the same issue → keep the highest-severity, most
 specific one), then **cap** to at most **3 per file** and **12 total**,
 highest-severity first.
 
-### 2b. Grouping
+### 3b. Grouping
 
 Use `context.grouping[intent]` as the system guidance. For `custom`, take
 `context.grouping.customTemplate` and replace `__PYOR_CUSTOM_INSTRUCTION__` with
@@ -126,7 +156,7 @@ Use `context.grouping[intent]` as the system guidance. For `custom`, take
                 "files": ["exact/diff/path"] } ] }   // every changed file in exactly one group
 ```
 
-### 2c. Assemble the hand-off
+### 3c. Assemble the hand-off
 
 Write it to a temp file (`mktemp`), shaped exactly:
 
@@ -141,10 +171,7 @@ Write it to a temp file (`mktemp`), shaped exactly:
 }
 ```
 
-## 3. Open in Pyor
-
-Give the review a short human **title** (≤ ~8 words) describing the session's
-topic/goal, not the branch name (e.g. "Fix promo-code expiry").
+## 4. Hand off to Pyor
 
 ```bash
 pyor-review open \
@@ -153,12 +180,13 @@ pyor-review open \
   --title "<short title>"
 ```
 
-Then tell the user the review is opening with the grouping + hints pre-loaded,
-and that they can read it, comment, and click **"Send to Claude"** to send their
-comments back to you. Mention the **Auto-send** toggle beside that button — with
-it on, each note reaches you the moment they save it, no click needed.
+This replaces the streamed hints with the merged set and adds the grouping.
+Then tell the user the review is ready, and that they can read it, comment, and
+click **"Send to Claude"** to send their comments back to you. Mention the
+**Auto-send** toggle beside that button: with it on, each note reaches you the
+moment they save it, no click needed.
 
-## 4. Wait for feedback
+## 5. Wait for feedback
 
 ```bash
 pyor-review wait --session <sessionId>
@@ -170,7 +198,7 @@ them. It holds with **no deadline**; pass `--timeout <seconds>` if you want a
 bounded wait. If you can't run background commands, run it in the foreground.
 
 - `status:"received"` — present the returned `feedback.commentsMarkdown`, act on
-  it as the user directs, reply to each note (step 5), then **park a fresh
+  it as the user directs, reply to each note (step 6), then **park a fresh
   `wait`** on the same session. The reviewer is usually still reading, and their
   next note has nowhere to land without one.
 - `status:"pending"` — only when you passed `--timeout`. Re-run `wait` to keep
@@ -181,7 +209,7 @@ bounded wait. If you can't run background commands, run it in the foreground.
   re-run, or another agent session on this branch). Only one `wait` consumes a
   session's notes, so this one stepped aside: do not re-arm it.
 
-## 5. Reply to each note
+## 6. Reply to each note
 
 Every note in `commentsMarkdown` carries an `id:` in its heading. Answer it back
 into Pyor so your reply renders under the reviewer's own comment:

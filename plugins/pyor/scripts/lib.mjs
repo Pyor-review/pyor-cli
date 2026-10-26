@@ -179,7 +179,7 @@ export function appendReplyOp(sessionId, op) {
 /** Exclusive lock via create-if-absent, which is atomic on every platform we
  * run on. Spins briefly, then takes the lock anyway: a stale file from a killed
  * process must not wedge every future reply. */
-function acquireLock(lockPath, timeoutMs = 2000) {
+export function acquireLock(lockPath, timeoutMs = 2000) {
   const started = Date.now();
   for (;;) {
     try {
