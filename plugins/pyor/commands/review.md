@@ -232,13 +232,23 @@ same session.
 
 Every note in `commentsMarkdown` carries an `id:` in its heading. Once you have
 acted on one, answer it back into Pyor so the reply renders under the reviewer's
-own comment, right where they wrote it:
+own comment, right where they wrote it. Always pass `--body -` and pipe the
+reply on stdin, so the shell leaves backticks and quotes alone:
 
-```bash
+````bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" reply \
   --session <sessionId> --comment <id from the heading> \
-  --body "what you did, or why you didn't" --addressed
+  --addressed --body - <<'EOF'
+> Should this retry on 429 too?
+
+Yes. `fetchPage` now retries a 429 with the same backoff as a 5xx
+(`src/api/client.ts:42`):
+
+```ts
+if (res.status === 429 || res.status >= 500) return retry(attempt + 1);
 ```
+EOF
+````
 
 - `--addressed` marks the note done. It greys out in Pyor and drops out of every
   later hand-off, so the next `wait` returns only what is still open. Leave it
@@ -250,25 +260,8 @@ thread. Write it that way:
 - When the note asks more than one thing, quote each part with `>` and answer
   under it.
 - Put code longer than a name in a fenced block tagged with its language.
-- Point at what you changed as `path:line`.
+- Point at code as `path:line`.
 - Keep it short. Say what you did or why you didn't, then stop.
-
-Pass `--body -` and pipe the reply on stdin, so the shell leaves the backticks
-and quotes alone:
-
-````bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" reply \
-  --session <sessionId> --comment <id> --body - <<'EOF'
-> Should this retry on 429 too?
-
-Yes. `fetchPage` retries a 429 with the same backoff as a 5xx
-(`src/api/client.ts:42`):
-
-```ts
-if (res.status === 429 || res.status >= 500) return retry(attempt + 1);
-```
-EOF
-````
 
 Reply to **every** note you were sent, one call each, before parking the next
 `wait`. A note with no reply reads as ignored.
