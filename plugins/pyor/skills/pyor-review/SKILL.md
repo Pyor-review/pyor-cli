@@ -225,18 +225,36 @@ hook runs this for you and says so in the session context; act on it first.)
 ## 6. Reply to each note
 
 Every note in `commentsMarkdown` carries an `id:` in its heading. Answer it back
-into Pyor so your reply renders under the reviewer's own comment:
+into Pyor so your reply renders under the reviewer's own comment. Always pass
+`--body -` and pipe the reply on stdin, so the shell leaves backticks and quotes
+alone:
 
-```bash
+````bash
 pyor-review reply --session <sessionId> --comment <id from the heading> \
-  --body "what you did, or why you didn't" --addressed
+  --addressed --body - <<'EOF'
+> Should this retry on 429 too?
+
+Yes. `fetchPage` now retries a 429 with the same backoff as a 5xx
+(`src/api/client.ts:42`):
+
+```ts
+if (res.status === 429 || res.status >= 500) return retry(attempt + 1);
 ```
+EOF
+````
 
 - `--addressed` marks the note done: it greys out in Pyor and drops out of every
   later hand-off, so the next `wait` returns only what is still open. Leave it
   off when you are answering a question or disagreeing rather than fixing.
-- For a long markdown reply, pass `--body -` and pipe it on stdin instead of
-  fighting shell quoting.
+
+Pyor renders the reply as GitHub-flavored markdown, like a comment in a PR
+thread. Write it that way:
+
+- When the note asks more than one thing, quote each part with `>` and answer
+  under it.
+- Put code longer than a name in a fenced block tagged with its language.
+- Point at code as `path:line`.
+- Keep it short. Say what you did or why you didn't, then stop.
 
 Reply to **every** note you were sent, one call each, before parking the next
 `wait`. A note with no reply reads as ignored.
