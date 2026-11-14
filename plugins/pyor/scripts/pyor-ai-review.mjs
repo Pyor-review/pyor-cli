@@ -41,6 +41,7 @@ import {
   recordReview,
   reviewPath,
   flag,
+  flags,
   recordedAgent,
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
@@ -49,6 +50,7 @@ import { randomUUID } from 'node:crypto';
 function out(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
 }
+
 
 function prepare(argv) {
   let repo, head;
@@ -428,12 +430,14 @@ function reply(argv) {
     process.exitCode = 1;
     return;
   }
+  const suggestions = flags(argv, 'suggest');
   try {
     const queued = appendReplyOp(session, {
       id: randomUUID(),
       commentId,
       body: body || null,
       addressed,
+      ...(suggestions.length > 0 ? { suggestions } : {}),
       author: flag(argv, 'author') ?? recordedAgent(session) ?? 'claude',
       createdAt: new Date().toISOString(),
     });
@@ -485,6 +489,11 @@ function selftest() {
   assert.equal(flag(['--session', '--hints', 'f'], 'session'), undefined);
   assert.equal(flag(['--body', '-'], 'body'), '-');
   assert.equal(flag(['--body', '--- see below'], 'body'), '--- see below');
+  assert.deepEqual(flags(['--suggest', 'Rename it', '--suggest', 'Keep it'], 'suggest'), [
+    'Rename it',
+    'Keep it',
+  ]);
+  assert.deepEqual(flags(['--suggest', '--addressed'], 'suggest'), []);
   // wait holds with no deadline unless one is asked for; junk is rejected.
   assert.equal(parseTimeout(undefined), 0);
   assert.equal(parseTimeout('90'), 90_000);

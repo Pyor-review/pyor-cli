@@ -189,9 +189,10 @@ pyor-review open \
 
 This replaces the streamed hints with the merged set and adds the grouping.
 Then tell the user the review is ready, and that they can read it, comment, and
-click **"Send to Claude"** to send their comments back to you. Mention the
-**Auto-send** toggle beside that button: with it on, each note reaches you the
-moment they save it, no click needed.
+click **"Send to Claude"** to send their comments back to you. Mention that
+**Send notes as I save them** (in the caret beside that button) is on, so each
+note reaches you the moment they save it. With it off, each note has its own
+**Send to Claude** button.
 
 ## 5. Wait for feedback
 
@@ -246,6 +247,12 @@ EOF
 - `--addressed` marks the note done: it greys out in Pyor and drops out of every
   later hand-off, so the next `wait` returns only what is still open. Leave it
   off when you are answering a question or disagreeing rather than fixing.
+- When the note ends on a question back to the reviewer (two ways to fix it,
+  or whether to fix it at all), add up to three `--suggest "<answer>"` flags.
+  Pyor shows each as a one-click reply under yours, so keep them short (under
+  200 characters, longer ones are dropped), in the
+  reviewer's voice, and distinct: `--suggest "Rename it to loadUser" --suggest
+  "Keep the name"`. Skip them when nothing is being asked.
 
 Pyor renders the reply as GitHub-flavored markdown, like a comment in a PR
 thread. Write it that way:
