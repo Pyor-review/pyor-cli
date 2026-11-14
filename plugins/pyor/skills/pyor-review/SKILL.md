@@ -75,8 +75,8 @@ Parse the JSON on stdout.
   id and a review left open earlier can still receive feedback.
 - `update` set (a newer pyor-cli is out): before step 2, tell the user once,
   in one line: `pyor-cli <update.latest> is out (you have <update.current>)`,
-  and ask whether to update now, not now, or never for that release. Don't
-  wait on the answer to carry on with the review.
+  and offer to update now, not now, or never for that release. Carry on with
+  the review meanwhile, and act on their answer when it comes.
   - Update now: run `update.command`. When it is null, tell them to update the
     Pyor plugin in their agent instead. The new version loads the next time
     they start their agent in this folder; an open review carries on by itself

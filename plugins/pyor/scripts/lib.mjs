@@ -122,8 +122,7 @@ export function openUrl(url) {
   });
 }
 
-/** PYOR_DIR overrides the channel root. Only the selftest sets it, so a test
- * run never touches the real queues sitting in a user's home. */
+// Pyor's app keeps the same mapping in its shared/pyorCli.ts.
 const UPDATE_COMMANDS = {
   'claude-plugin': 'claude plugin marketplace update pyor && claude plugin update pyor@pyor',
   npm: 'npm i -g pyor-review@latest',
@@ -163,6 +162,8 @@ export async function cliUpdate() {
   }
 }
 
+/** PYOR_DIR overrides the channel root. Only the selftest sets it, so a test
+ * run never touches the real queues sitting in a user's home. */
 export function pyorDir() {
   return process.env.PYOR_DIR || path.join(os.homedir(), '.pyor');
 }
