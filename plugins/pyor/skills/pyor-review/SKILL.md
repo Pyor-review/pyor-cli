@@ -246,6 +246,11 @@ EOF
 - `--addressed` marks the note done: it greys out in Pyor and drops out of every
   later hand-off, so the next `wait` returns only what is still open. Leave it
   off when you are answering a question or disagreeing rather than fixing.
+- When the note ends on a question back to the reviewer (two ways to fix it,
+  or whether to fix it at all), add up to three `--suggest "<answer>"` flags.
+  Pyor shows each as a one-click reply under yours, so keep them short, in the
+  reviewer's voice, and distinct: `--suggest "Rename it to loadUser" --suggest
+  "Keep the name"`. Skip them when nothing is being asked.
 
 Pyor renders the reply as GitHub-flavored markdown, like a comment in a PR
 thread. Write it that way:
