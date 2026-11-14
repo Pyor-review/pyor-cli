@@ -62,6 +62,15 @@ Parse the JSON on stdout.
   `basePromptVersion`, `intent`, `customText`, and `context`. `sessionId` is
   **stable per review** — re-running `prepare` for the same repo/head/base
   returns the same id, so a `wait` you already parked stays valid.
+- `update` set (a newer pyor-cli is out): before step 2, tell the user once,
+  in one line: `pyor-cli <update.latest> is out (you have <update.current>)`,
+  and offer to update now, not now, or never for that release. Carry on with
+  the review meanwhile, and act on their answer when it comes.
+  - Update now: run `update.command`. When it is null, tell them to update the
+    Pyor plugin in Claude Code instead. The new version loads the next time
+    they start Claude Code in this folder; an open review carries on by itself
+    then, so there is no need to run `/pyor:review` again.
+  - Never for that release: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" skip-update <update.latest>`.
 
 ## 2. Open in Pyor now
 

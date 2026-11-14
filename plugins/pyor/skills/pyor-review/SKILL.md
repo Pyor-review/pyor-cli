@@ -73,6 +73,15 @@ Parse the JSON on stdout.
   `basePromptVersion`, `intent`, `customText`, and `context`. The `sessionId` is
   **deterministic** for this repo+branch, so re-running prepare returns the same
   id and a review left open earlier can still receive feedback.
+- `update` set (a newer pyor-cli is out): before step 2, tell the user once,
+  in one line: `pyor-cli <update.latest> is out (you have <update.current>)`,
+  and offer to update now, not now, or never for that release. Carry on with
+  the review meanwhile, and act on their answer when it comes.
+  - Update now: run `update.command`. When it is null, tell them to update the
+    Pyor plugin in their agent instead. The new version loads the next time
+    they start their agent in this folder; an open review carries on by itself
+    then, so there is no need to run `/pyor:review` again.
+  - Never for that release: run `pyor-review skip-update <update.latest>`.
 
 ## 2. Open in Pyor now
 
