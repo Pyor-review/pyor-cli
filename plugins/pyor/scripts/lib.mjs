@@ -224,6 +224,11 @@ export function flag(argv, name) {
   return value && /^--[a-z][a-z-]*$/.test(value) ? undefined : value;
 }
 
+/** Every value of a repeatable flag, each read the way `flag` reads one. */
+export function flags(argv, name) {
+  return argv.flatMap((token, i) => (token === `--${name}` ? [flag(argv.slice(i), name)] : [])).filter(Boolean);
+}
+
 export const INSTALL_CMD = 'curl -fsSL https://pyor.review/install.sh | sh';
 
 /** Read + parse ~/.pyor/review-context.json, or null if absent/unreadable.

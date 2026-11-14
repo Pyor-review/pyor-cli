@@ -41,23 +41,16 @@ import {
   recordReview,
   reviewPath,
   flag,
+  flags,
   recordedAgent,
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
 
 
-const MAX_SUGGESTIONS = 3;
-
 function out(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
 }
 
-/** Every value of a repeatable flag, read the way `flag` reads one. */
-function flags(argv, name) {
-  return argv.flatMap((token, i) =>
-    token === `--${name}` && flag(argv.slice(i), name) ? [argv[i + 1]] : [],
-  );
-}
 
 function prepare(argv) {
   let repo, head;
@@ -437,8 +430,7 @@ function reply(argv) {
     process.exitCode = 1;
     return;
   }
-  // Pyor shows these as one-click answers under the reply. A question needs a body.
-  const suggestions = body ? flags(argv, 'suggest').slice(0, MAX_SUGGESTIONS) : [];
+  const suggestions = flags(argv, 'suggest');
   try {
     const queued = appendReplyOp(session, {
       id: randomUUID(),
