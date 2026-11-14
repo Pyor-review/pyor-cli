@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Keeps the plugin + marketplace manifests, and the skill's pinned npx
-// version, on package.json's version. Run by the `version` lifecycle, so
+// Keeps the plugin + marketplace manifests, the skill's pinned npx version
+// and the scripts' VERSION on package.json's version. Run by the `version` lifecycle, so
 // `npm version <x>` bumps them all and tags once.
 import fs from 'node:fs';
 
@@ -25,4 +25,9 @@ fs.writeFileSync(
   fs.readFileSync(skill, 'utf8').replaceAll(/pyor-review@\d+\.\d+\.\d+/g, `pyor-review@${version}`),
 );
 
-console.log(`synced manifests and skill to ${version}`);
+fs.writeFileSync(
+  'plugins/pyor/scripts/version.mjs',
+  `// Written by scripts/sync-version.mjs from package.json; do not edit by hand.\nexport const VERSION = '${version}';\n`,
+);
+
+console.log(`synced manifests, skill and version.mjs to ${version}`);

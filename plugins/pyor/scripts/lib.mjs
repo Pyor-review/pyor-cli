@@ -8,6 +8,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { VERSION } from './version.mjs';
 
 export function git(args, cwd, env) {
   return execFileSync('git', args, {
@@ -89,7 +91,19 @@ export function buildDeepLink({ path: repoPath, worktree, head, base, aids, sess
   if (session) q.set('session', session);
   if (title) q.set('title', title);
   if (agent) q.set('agent', agent);
+  // Pyor compares these with npm's latest and offers the update.
+  q.set('cli', VERSION);
+  q.set('install', installKind(fileURLToPath(import.meta.url)));
   return `pyor://local-review?${q.toString()}`;
+}
+
+/** How this copy was installed, read off its own path: decides the update command Pyor shows. */
+export function installKind(scriptPath) {
+  const p = scriptPath.replaceAll('\\', '/');
+  if (p.includes('/.claude/plugins/')) return 'claude-plugin';
+  if (p.includes('/.codex/')) return 'codex-plugin';
+  if (p.includes('/_npx/')) return 'npx';
+  return 'npm';
 }
 
 /** Open a URL with the OS handler (fires the deep link → focuses/launches the
