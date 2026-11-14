@@ -42,6 +42,9 @@ import {
   reviewPath,
   flag,
   flags,
+  cliUpdate,
+  isNewer,
+  skipUpdate,
   recordedAgent,
 } from './lib.mjs';
 import { randomUUID } from 'node:crypto';
@@ -52,7 +55,7 @@ function out(obj) {
 }
 
 
-function prepare(argv) {
+async function prepare(argv) {
   let repo, head;
   try {
     ({ repo, head } = resolveRepoHead(process.cwd()));
@@ -88,7 +91,20 @@ function prepare(argv) {
     intent,
     customText: flag(argv, 'custom'),
     context,
+    update: await cliUpdate(),
   });
+}
+
+/** Stop offering one pyor-cli release: `skip-update <version>`. */
+function skipUpdateCmd(argv) {
+  const version = argv[1];
+  if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
+    out({ ok: false, error: 'skip-update needs a version, like 0.11.0' });
+    process.exitCode = 1;
+    return;
+  }
+  skipUpdate(version);
+  out({ ok: true, skipped: version });
 }
 
 function open(argv) {
@@ -494,6 +510,10 @@ function selftest() {
     'Keep it',
   ]);
   assert.deepEqual(flags(['--suggest', '--addressed'], 'suggest'), []);
+  assert.equal(isNewer('0.10.0', '0.9.0'), true);
+  assert.equal(isNewer('0.9.0', '0.10.0'), false);
+  assert.equal(isNewer('0.10.0', '0.10.0'), false);
+  assert.equal(isNewer('1.0.0', '0.99.9'), true);
   // wait holds with no deadline unless one is asked for; junk is rejected.
   assert.equal(parseTimeout(undefined), 0);
   assert.equal(parseTimeout('90'), 90_000);
@@ -574,7 +594,8 @@ function selftest() {
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 if (cmd === '--selftest') selftest();
-else if (cmd === 'prepare') prepare(argv);
+else if (cmd === 'prepare') await prepare(argv);
+else if (cmd === 'skip-update') skipUpdateCmd(argv);
 else if (cmd === 'open') open(argv);
 else if (cmd === 'progress') progress(argv);
 else if (cmd === 'reply') reply(argv);
@@ -582,7 +603,7 @@ else if (cmd === 'wait') await wait(argv);
 else if (cmd === 'status') status(argv);
 else {
   process.stderr.write(
-    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|status|--selftest\n',
+    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|status|skip-update|--selftest\n',
   );
   process.exitCode = 1;
 }

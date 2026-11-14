@@ -124,6 +124,45 @@ export function openUrl(url) {
 
 /** PYOR_DIR overrides the channel root. Only the selftest sets it, so a test
  * run never touches the real queues sitting in a user's home. */
+const UPDATE_COMMANDS = {
+  'claude-plugin': 'claude plugin marketplace update pyor && claude plugin update pyor@pyor',
+  npm: 'npm i -g pyor-review@latest',
+};
+
+/** True when `a` is a later x.y.z release than `b`. */
+export function isNewer(a, b) {
+  const parts = (v) => String(v).split('-')[0].split('.').map(Number);
+  const [x, y] = [parts(a), parts(b)];
+  const i = [0, 1, 2].find((k) => (x[k] ?? 0) !== (y[k] ?? 0));
+  return i !== undefined && (x[i] ?? 0) > (y[i] ?? 0);
+}
+
+const skipPath = () => path.join(pyorDir(), 'cli-update-skip');
+
+/** Stop offering `version`; a later release is offered again. */
+export function skipUpdate(version) {
+  fs.mkdirSync(pyorDir(), { recursive: true });
+  fs.writeFileSync(skipPath(), version);
+}
+
+/** npm's newer release of pyor-review, unless the user skipped it, with the
+ * command that updates this install (null: only the agent's plugin screen can).
+ * Null when up to date or offline: it never holds up a review. */
+export async function cliUpdate() {
+  try {
+    const res = await fetch('https://registry.npmjs.org/pyor-review/latest', {
+      signal: AbortSignal.timeout(2000),
+    });
+    const latest = res.ok ? (await res.json()).version : null;
+    const skipped = fs.existsSync(skipPath()) ? fs.readFileSync(skipPath(), 'utf8').trim() : null;
+    if (!latest || !isNewer(latest, VERSION) || skipped === latest) return null;
+    const install = installKind(fileURLToPath(import.meta.url));
+    return { current: VERSION, latest, command: UPDATE_COMMANDS[install] ?? null };
+  } catch {
+    return null;
+  }
+}
+
 export function pyorDir() {
   return process.env.PYOR_DIR || path.join(os.homedir(), '.pyor');
 }
