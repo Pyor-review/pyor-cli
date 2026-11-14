@@ -29,13 +29,17 @@ import {
   reviewContextPath,
   recordReview,
   flag,
+  installKind,
 } from './lib.mjs';
 
 function selftest() {
-  assert.equal(
+  assert.match(
     buildDeepLink({ path: '/r/p', head: 'b/x', base: 'main' }),
-    'pyor://local-review?path=%2Fr%2Fp&worktree=%2Fr%2Fp&head=b%2Fx&base=main',
+    /^pyor:\/\/local-review\?path=%2Fr%2Fp&worktree=%2Fr%2Fp&head=b%2Fx&base=main&cli=\d+\.\d+\.\d+&install=/,
   );
+  assert.equal(installKind('/Users/a/.claude/plugins/cache/pyor/pyor/0.9.0/scripts/lib.mjs'), 'claude-plugin');
+  assert.equal(installKind('/Users/a/.npm/_npx/123/node_modules/pyor-review/plugins/pyor/scripts/lib.mjs'), 'npx');
+  assert.equal(installKind('/usr/local/lib/node_modules/pyor-review/plugins/pyor/scripts/lib.mjs'), 'npm');
   const u = new URL(
     buildDeepLink({ path: '/a b', worktree: '/wt', head: 'feat', base: 'dev' }),
   );
