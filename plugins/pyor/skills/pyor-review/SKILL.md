@@ -217,7 +217,10 @@ bounded wait. If you can't run background commands, run it in the foreground.
 - `status:"received"` — present the returned `feedback.commentsMarkdown`, act on
   it as the user directs, reply to each note (step 6), then **park a fresh
   `wait`** on the same session. The reviewer is usually still reading, and their
-  next note has nowhere to land without one.
+  next note has nowhere to land without one. A note that only asks a question
+  (often one quoting a hint you wrote, from **Ask** on a Pyor hint) wants an
+  answer: reply with it, and leave the code as it is unless the note asks for a
+  change.
 - `status:"pending"` — only when you passed `--timeout`. Re-run `wait` to keep
   listening, or stop if the user is done. Comments are buffered on disk, so a
   send while no `wait` is running is picked up by the next `wait` on the same

@@ -218,7 +218,9 @@ free while it idles. Pass `--timeout <seconds>` if you want a bounded one.
   is reviewer notes to address), act on them as the user directs, answer each one
   with `reply` (step 6), and then **park a fresh `wait` on the same
   `sessionId`** — the reviewer is usually still reading, and their next note has
-  nowhere to land without it.
+  nowhere to land without it. A note that only asks a question (often one
+  quoting a hint you wrote, from **Ask** on a Pyor hint) wants an answer: reply
+  with it, and leave the code as it is unless the note asks for a change.
 - `status:"pending"` — only possible when you passed `--timeout`. Re-arm another
   background `wait` on the same `sessionId`. Comments are buffered on disk, so
   even if no `wait` was in flight when they sent, the next `wait` returns them
