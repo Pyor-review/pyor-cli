@@ -217,10 +217,7 @@ bounded wait. If you can't run background commands, run it in the foreground.
 - `status:"received"` — present the returned `feedback.commentsMarkdown`, act on
   it as the user directs, reply to each note (step 6), then **park a fresh
   `wait`** on the same session. The reviewer is usually still reading, and their
-  next note has nowhere to land without one. A note that only asks a question
-  (often one quoting a hint you wrote, from **Ask** on a Pyor hint) wants an
-  answer: reply with it, and leave the code as it is unless the note asks for a
-  change.
+  next note has nowhere to land without one.
 - `status:"pending"` — only when you passed `--timeout`. Re-run `wait` to keep
   listening, or stop if the user is done. Comments are buffered on disk, so a
   send while no `wait` is running is picked up by the next `wait` on the same
@@ -259,6 +256,12 @@ EOF
 - `--addressed` marks the note done: it greys out in Pyor and drops out of every
   later hand-off, so the next `wait` returns only what is still open. Leave it
   off when you are answering a question or disagreeing rather than fixing.
+- A note that opens with an AI hint quoted under `>` (its bold title, then its
+  text) asks about that hint. The quote, including any code in it, is context;
+  the reviewer's text below it is the request. Answer the question, change code
+  only when that text asks for a change, and leave off `--addressed` while you
+  are only answering. A note that is only the quote asks you to explain the
+  hint.
 - When the note ends on a question back to the reviewer (two ways to fix it,
   or whether to fix it at all), add up to three `--suggest "<answer>"` flags.
   Pyor shows each as a one-click reply under yours, so keep them short (under

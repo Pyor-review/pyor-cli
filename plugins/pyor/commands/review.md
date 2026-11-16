@@ -218,9 +218,7 @@ free while it idles. Pass `--timeout <seconds>` if you want a bounded one.
   is reviewer notes to address), act on them as the user directs, answer each one
   with `reply` (step 6), and then **park a fresh `wait` on the same
   `sessionId`** — the reviewer is usually still reading, and their next note has
-  nowhere to land without it. A note that only asks a question (often one
-  quoting a hint you wrote, from **Ask** on a Pyor hint) wants an answer: reply
-  with it, and leave the code as it is unless the note asks for a change.
+  nowhere to land without it.
 - `status:"pending"` — only possible when you passed `--timeout`. Re-arm another
   background `wait` on the same `sessionId`. Comments are buffered on disk, so
   even if no `wait` was in flight when they sent, the next `wait` returns them
@@ -242,8 +240,9 @@ same session.
 ## 6. Reply to each note
 
 Every note in `commentsMarkdown` carries an `id:` in its heading. Once you have
-acted on one, answer it back into Pyor so the reply renders under the reviewer's
-own comment, right where they wrote it. Always pass `--body -` and pipe the
+acted on one, or worked out the answer to its question, answer it back into
+Pyor so the reply renders under the reviewer's own comment, right where they
+wrote it. Always pass `--body -` and pipe the
 reply on stdin, so the shell leaves backticks and quotes alone:
 
 ````bash
@@ -264,6 +263,12 @@ EOF
 - `--addressed` marks the note done. It greys out in Pyor and drops out of every
   later hand-off, so the next `wait` returns only what is still open. Leave it
   off when you are answering a question or disagreeing rather than fixing.
+- A note that opens with an AI hint quoted under `>` (its bold title, then its
+  text) asks about that hint. The quote, including any code in it, is context;
+  the reviewer's text below it is the request. Answer the question, change code
+  only when that text asks for a change, and leave off `--addressed` while you
+  are only answering. A note that is only the quote asks you to explain the
+  hint.
 - When the note ends on a question back to the reviewer (two ways to fix it,
   or whether to fix it at all), add up to three `--suggest "<answer>"` flags.
   Pyor shows each as a one-click reply under yours, so keep them short (under
