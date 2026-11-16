@@ -256,6 +256,12 @@ EOF
 - `--addressed` marks the note done: it greys out in Pyor and drops out of every
   later hand-off, so the next `wait` returns only what is still open. Leave it
   off when you are answering a question or disagreeing rather than fixing.
+- A note that opens with an AI hint quoted under `>` (its bold title, then its
+  text) asks about that hint. The quote, including any code in it, is context;
+  the reviewer's text below it is the request. Answer the question, change code
+  only when that text asks for a change, and leave off `--addressed` while you
+  are only answering. A note that is only the quote asks you to explain the
+  hint.
 - When the note ends on a question back to the reviewer (two ways to fix it,
   or whether to fix it at all), add up to three `--suggest "<answer>"` flags.
   Pyor shows each as a one-click reply under yours, so keep them short (under
