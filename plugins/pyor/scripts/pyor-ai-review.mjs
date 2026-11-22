@@ -243,9 +243,9 @@ async function wait(argv) {
       return;
     }
     touchWaiter(session);
-    const vote = claim(votePath(session));
-    if (vote !== undefined) {
-      out({ ok: true, status: 'vote', vote: vote?.vote ?? null });
+    const vote = openVote(session, claim(votePath(session)));
+    if (vote) {
+      out({ ok: true, status: 'vote', vote });
       return;
     }
     // Claim by rename before reading. The app writes the inbox atomically, but
@@ -280,6 +280,33 @@ async function wait(argv) {
 
 /** Take a file the app publishes by renaming it out of its path, then read it.
  * Undefined when nothing is there; null when what was there did not parse. */
+/** A claimed vote request, kept open with the indexes it asks about so `ballot`
+ * can refuse an incomplete ballot. A malformed request is dropped: the app then
+ * counts the session as sitting the vote out. */
+function openVote(session, request) {
+  const vote = request?.vote;
+  const targets = typeof vote?.ask === 'string' && vote.ask.match(/<vote-on>(\[[\d,\s]*\])<\/vote-on>/);
+  if (typeof vote?.id !== 'string' || !targets) return undefined;
+  const open = openVotePath(session);
+  fs.mkdirSync(path.dirname(open), { recursive: true });
+  fs.writeFileSync(open, JSON.stringify({ id: vote.id, targets: JSON.parse(targets[1]) }));
+  return vote;
+}
+
+const openVotePath = (session) => `${ballotPath(session)}.open`;
+
+/** Why `votes` does not answer `open`, or undefined when it does: one vote on each listed index and no other. */
+function ballotProblem(votes, open) {
+  const indexes = votes.map((v) => v.index);
+  const missing = open.targets.filter((t) => !indexes.includes(t));
+  const extra = indexes.filter((i, n) => !open.targets.includes(i) || indexes.indexOf(i) !== n);
+  const badDuplicate = votes.find((v) => v.vote === 'DUPLICATE' && (!Number.isInteger(v.duplicateOf) || v.duplicateOf === v.index));
+  if (missing.length) return `no vote on index ${missing.join(', ')}`;
+  if (extra.length) return `index ${[...new Set(extra)].join(', ')} is not in <vote-on> or is voted twice`;
+  if (badDuplicate) return `index ${badDuplicate.index} is DUPLICATE without the integer duplicateOf of another finding`;
+  return undefined;
+}
+
 function claim(file) {
   const claimed = `${file}.claimed`;
   try {
@@ -322,6 +349,23 @@ function ballot(argv) {
     process.exitCode = 1;
     return;
   }
+  let open;
+  try {
+    open = JSON.parse(fs.readFileSync(openVotePath(session), 'utf8'));
+  } catch {
+    open = null;
+  }
+  if (open?.id !== id) {
+    out({ ok: false, error: `Vote ${id} is no longer open: Pyor went on without it. Park a fresh wait.` });
+    process.exitCode = 1;
+    return;
+  }
+  const problem = ballotProblem(votes, open);
+  if (problem) {
+    out({ ok: false, error: `Ballot not sent: ${problem}. Fix the file and run ballot again.` });
+    process.exitCode = 1;
+    return;
+  }
   const normalized = votes.map((v) => ({
     index: v.index,
     vote: v.vote,
@@ -333,6 +377,7 @@ function ballot(argv) {
   const tmp = `${dest}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ id, votes: normalized }));
   fs.renameSync(tmp, dest);
+  fs.rmSync(openVotePath(session), { force: true });
   out({ ok: true, votes: normalized.length });
 }
 
@@ -648,16 +693,38 @@ function selftest() {
     // A vote request is claimed once, and the ballot lands whole for the app.
     const vs = computeSessionId('/selftest', 'b/vote', 'main');
     fs.mkdirSync(path.dirname(votePath(vs)), { recursive: true });
-    fs.writeFileSync(votePath(vs), JSON.stringify({ vote: { id: 'v1', ask: 'vote' } }));
-    assert.deepEqual(claim(votePath(vs)), { vote: { id: 'v1', ask: 'vote' } });
+    const request = { vote: { id: 'v1', ask: 'vote\n<vote-on>[0,2]</vote-on>' } };
+    fs.writeFileSync(votePath(vs), JSON.stringify(request));
+    assert.deepEqual(openVote(vs, claim(votePath(vs))), request.vote);
     assert.equal(claim(votePath(vs)), undefined);
+    // A request with no <vote-on> is dropped rather than handed to the agent.
+    assert.equal(openVote(vs, { vote: { id: 'v0', ask: 'vote' } }), undefined);
+    assert.equal(openVote(vs, null), undefined);
     const votesFile = path.join(sandbox, 'votes.json');
-    fs.writeFileSync(votesFile, JSON.stringify({ votes: [{ index: 0, vote: 'AGREE', comment: 'real' }] }));
-    ballot(['--session', vs, '--vote', 'v1', '--votes', votesFile]);
+    const send = (votes, vote = 'v1') => {
+      fs.writeFileSync(votesFile, JSON.stringify({ votes }));
+      process.exitCode = 0;
+      ballot(['--session', vs, '--vote', vote, '--votes', votesFile]);
+      const sent = process.exitCode !== 1;
+      process.exitCode = 0;
+      return sent;
+    };
+    const agree = (index) => ({ index, vote: 'AGREE', comment: 'real' });
+    assert.equal(send([agree(0)]), false, 'a listed index has no vote');
+    assert.equal(send([agree(0), agree(2), agree(0)]), false, 'an index voted twice');
+    assert.equal(send([agree(0), agree(1)]), false, 'an index not in <vote-on>');
+    assert.equal(send([agree(0), { index: 2, vote: 'DUPLICATE', comment: '' }]), false, 'DUPLICATE with no target');
+    assert.equal(send([agree(0), { index: 2, vote: 'MAYBE' }]), false, 'unknown vote');
+    assert.equal(send([agree(0), agree(2)], 'v9'), false, 'a vote that is not open');
+    assert.equal(send([agree(0), { index: 2, vote: 'DUPLICATE', duplicateOf: 0, comment: 'same' }]), true);
     assert.deepEqual(JSON.parse(fs.readFileSync(ballotPath(vs), 'utf8')), {
       id: 'v1',
-      votes: [{ index: 0, vote: 'AGREE', duplicateOf: null, comment: 'real' }],
+      votes: [
+        { index: 0, vote: 'AGREE', duplicateOf: null, comment: 'real' },
+        { index: 2, vote: 'DUPLICATE', duplicateOf: 0, comment: 'same' },
+      ],
     });
+    assert.equal(send([agree(0), agree(2)]), false, 'the vote closes once its ballot is sent');
     // The queue is written whole: no temp or lock file outlives the append.
     const leftovers = fs
       .readdirSync(path.dirname(repliesPath(rs)))
