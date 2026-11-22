@@ -206,6 +206,17 @@ export function inboxPath(sessionId) {
   return path.join(pyorDir(), 'inbox', `${sessionId}.json`);
 }
 
+/** A panel vote Pyor asks of this session. It sits beside the inbox so it
+ * never replaces a queued hand-off; `wait` claims it the same way. */
+export function votePath(sessionId) {
+  return path.join(pyorDir(), 'inbox', `${sessionId}.vote.json`);
+}
+
+/** The session's answer to that vote, which the app reads and removes. */
+export function ballotPath(sessionId) {
+  return path.join(pyorDir(), 'replies', `${sessionId}.ballot.json`);
+}
+
 /** Where `open` stages the aids hand-off for the app to read. Under ~/.pyor
  * (home-derived, so identical for the app and for a CLI whose TMPDIR a coding
  * harness has sandboxed) rather than os.tmpdir(), whose divergence made the
