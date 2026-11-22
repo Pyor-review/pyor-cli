@@ -12,7 +12,9 @@
 //   progress → stream a reviewer's hints into that live file, or mark the
 //              review failed, while the panel is still working.
 //   wait     → park, polling ~/.pyor/inbox/<session>.json for the comments the
-//              reviewer sends back, and print them once they arrive.
+//              reviewer sends back, and print them once they arrive. Also
+//              returns a panel vote request Pyor asks of the session.
+//   ballot   → answer that vote request.
 //   status   → whether this branch's review is still open, so a new or
 //              compacted session can re-arm its wait (the SessionStart hook).
 //
@@ -34,6 +36,8 @@ import {
   readReviewContext,
   reviewContextPath,
   inboxPath,
+  votePath,
+  ballotPath,
   aidsPath,
   appendReplyOp,
   repliesPath,
@@ -239,6 +243,11 @@ async function wait(argv) {
       return;
     }
     touchWaiter(session);
+    const vote = claim(votePath(session));
+    if (vote !== undefined) {
+      out({ ok: true, status: 'vote', vote: vote?.vote ?? null });
+      return;
+    }
     // Claim by rename before reading. The app writes the inbox atomically, but
     // read-then-delete still lets a second delivery land between the two and
     // be removed unread. Renaming takes the payload out of the path the app
@@ -267,6 +276,63 @@ async function wait(argv) {
     }
     await new Promise((r) => setTimeout(r, pollDelay(Date.now() - started)));
   }
+}
+
+/** Take a file the app publishes by renaming it out of its path, then read it.
+ * Undefined when nothing is there; null when what was there did not parse. */
+function claim(file) {
+  const claimed = `${file}.claimed`;
+  try {
+    fs.renameSync(file, claimed);
+  } catch {
+    return undefined;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(claimed, 'utf8'));
+  } catch {
+    return null;
+  } finally {
+    fs.rmSync(claimed, { force: true });
+  }
+}
+
+/** Answer a panel vote: `ballot --session <id> --vote <request id>`, with
+ * `{ "votes": [...] }` on stdin (or `--body <json>`). Each vote is
+ * `{ index, vote: AGREE|DISAGREE|DUPLICATE, duplicateOf, comment }`. */
+function ballot(argv) {
+  const session = flag(argv, 'session');
+  const id = flag(argv, 'vote');
+  if (!session || !id) {
+    out({ ok: false, error: 'ballot needs --session and --vote' });
+    process.exitCode = 1;
+    return;
+  }
+  const bodyFlag = flag(argv, 'body');
+  let votes;
+  try {
+    votes = JSON.parse(bodyFlag && bodyFlag !== '-' ? bodyFlag : readStdin()).votes;
+    assert.ok(Array.isArray(votes), 'expected { "votes": [...] }');
+    votes.forEach((v) => {
+      assert.ok(Number.isInteger(v.index), 'each vote needs an integer index');
+      assert.ok(['AGREE', 'DISAGREE', 'DUPLICATE'].includes(v.vote), 'vote is AGREE, DISAGREE or DUPLICATE');
+    });
+  } catch (e) {
+    out({ ok: false, error: `Unreadable ballot: ${e.message}` });
+    process.exitCode = 1;
+    return;
+  }
+  const normalized = votes.map((v) => ({
+    index: v.index,
+    vote: v.vote,
+    duplicateOf: Number.isInteger(v.duplicateOf) ? v.duplicateOf : null,
+    comment: typeof v.comment === 'string' ? v.comment : '',
+  }));
+  const file = ballotPath(session);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ id, votes: normalized }));
+  fs.renameSync(tmp, file);
+  out({ ok: true, votes: normalized.length });
 }
 
 /** The waiter lease: the pid of the one `wait` allowed to consume this
@@ -578,6 +644,17 @@ function selftest() {
     writeAids(ps, JSON.stringify({ revision: 'r' }));
     progress(['--session', ps, '--failed', 'late']);
     assert.equal(JSON.parse(fs.readFileSync(aidsPath(ps), 'utf8')).revision, 'r');
+    // A vote request is claimed once, and the ballot lands whole for the app.
+    const vs = computeSessionId('/selftest', 'b/vote', 'main');
+    fs.mkdirSync(path.dirname(votePath(vs)), { recursive: true });
+    fs.writeFileSync(votePath(vs), JSON.stringify({ vote: { id: 'v1', ask: 'vote' } }));
+    assert.deepEqual(claim(votePath(vs)), { vote: { id: 'v1', ask: 'vote' } });
+    assert.equal(claim(votePath(vs)), undefined);
+    ballot(['--session', vs, '--vote', 'v1', '--body', JSON.stringify({ votes: [{ index: 0, vote: 'AGREE', comment: 'real' }] })]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(ballotPath(vs), 'utf8')), {
+      id: 'v1',
+      votes: [{ index: 0, vote: 'AGREE', duplicateOf: null, comment: 'real' }],
+    });
     // The queue is written whole: no temp or lock file outlives the append.
     const leftovers = fs
       .readdirSync(path.dirname(repliesPath(rs)))
@@ -599,11 +676,12 @@ else if (cmd === 'skip-update') skipUpdateCmd(argv);
 else if (cmd === 'open') open(argv);
 else if (cmd === 'progress') progress(argv);
 else if (cmd === 'reply') reply(argv);
+else if (cmd === 'ballot') ballot(argv);
 else if (cmd === 'wait') await wait(argv);
 else if (cmd === 'status') status(argv);
 else {
   process.stderr.write(
-    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|status|skip-update|--selftest\n',
+    'usage: pyor-ai-review.mjs prepare|open|progress|wait|reply|ballot|status|skip-update|--selftest\n',
   );
   process.exitCode = 1;
 }

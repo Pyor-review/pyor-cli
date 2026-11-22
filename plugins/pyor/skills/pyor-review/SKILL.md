@@ -218,6 +218,20 @@ bounded wait. If you can't run background commands, run it in the foreground.
   it as the user directs, reply to each note (step 6), then **park a fresh
   `wait`** on the same session. The reviewer is usually still reading, and their
   next note has nowhere to land without one.
+- `status:"vote"` — Pyor's review panel ran beside you, and asks you to vote
+  on the merged hints, as each of its reviewers does. `vote.ask` holds the
+  instruction and the findings. Judge them yourself, against the code you
+  already know. Vote once on every index listed
+  in `<vote-on>`, then answer, piping the JSON on stdin:
+
+  ```bash
+  pyor-review ballot --session <sessionId> --vote <vote.id> --body - <<'EOF'
+  { "votes": [ { "index": 0, "vote": "AGREE", "duplicateOf": null, "comment": "why" } ] }
+  EOF
+  ```
+
+  Then park a fresh `wait`. A one-line mention is enough: the vote is part of
+  the review the user already started.
 - `status:"pending"` — only when you passed `--timeout`. Re-run `wait` to keep
   listening, or stop if the user is done. Comments are buffered on disk, so a
   send while no `wait` is running is picked up by the next `wait` on the same
