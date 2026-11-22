@@ -296,21 +296,22 @@ function claim(file) {
   }
 }
 
-/** Answer a panel vote: `ballot --session <id> --vote <request id>`, with
- * `{ "votes": [...] }` on stdin (or `--body <json>`). Each vote is
+/** Answer a panel vote: `ballot --session <id> --vote <request id> --votes
+ * <file>`, the file shaped `{ "votes": [...] }` (a file, as `progress --hints`
+ * takes: inline JSON trips the agent's shell checks). Each vote is
  * `{ index, vote: AGREE|DISAGREE|DUPLICATE, duplicateOf, comment }`. */
 function ballot(argv) {
   const session = flag(argv, 'session');
   const id = flag(argv, 'vote');
-  if (!session || !id) {
-    out({ ok: false, error: 'ballot needs --session and --vote' });
+  const file = flag(argv, 'votes');
+  if (!session || !id || !file) {
+    out({ ok: false, error: 'ballot needs --session, --vote and --votes <file>' });
     process.exitCode = 1;
     return;
   }
-  const bodyFlag = flag(argv, 'body');
   let votes;
   try {
-    votes = JSON.parse(bodyFlag && bodyFlag !== '-' ? bodyFlag : readStdin()).votes;
+    votes = JSON.parse(fs.readFileSync(file, 'utf8')).votes;
     assert.ok(Array.isArray(votes), 'expected { "votes": [...] }');
     votes.forEach((v) => {
       assert.ok(Number.isInteger(v.index), 'each vote needs an integer index');
@@ -327,11 +328,11 @@ function ballot(argv) {
     duplicateOf: Number.isInteger(v.duplicateOf) ? v.duplicateOf : null,
     comment: typeof v.comment === 'string' ? v.comment : '',
   }));
-  const file = ballotPath(session);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
+  const dest = ballotPath(session);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const tmp = `${dest}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ id, votes: normalized }));
-  fs.renameSync(tmp, file);
+  fs.renameSync(tmp, dest);
   out({ ok: true, votes: normalized.length });
 }
 
@@ -650,7 +651,9 @@ function selftest() {
     fs.writeFileSync(votePath(vs), JSON.stringify({ vote: { id: 'v1', ask: 'vote' } }));
     assert.deepEqual(claim(votePath(vs)), { vote: { id: 'v1', ask: 'vote' } });
     assert.equal(claim(votePath(vs)), undefined);
-    ballot(['--session', vs, '--vote', 'v1', '--body', JSON.stringify({ votes: [{ index: 0, vote: 'AGREE', comment: 'real' }] })]);
+    const votesFile = path.join(sandbox, 'votes.json');
+    fs.writeFileSync(votesFile, JSON.stringify({ votes: [{ index: 0, vote: 'AGREE', comment: 'real' }] }));
+    ballot(['--session', vs, '--vote', 'v1', '--votes', votesFile]);
     assert.deepEqual(JSON.parse(fs.readFileSync(ballotPath(vs), 'utf8')), {
       id: 'v1',
       votes: [{ index: 0, vote: 'AGREE', duplicateOf: null, comment: 'real' }],

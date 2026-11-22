@@ -223,12 +223,12 @@ free while it idles. Pass `--timeout <seconds>` if you want a bounded one.
   on the merged hints, as each of its reviewers does. `vote.ask` holds the
   instruction and the findings. Judge them yourself, against the code you
   already know. Vote once on every index listed
-  in `<vote-on>`, then answer, piping the JSON on stdin:
+  in `<vote-on>`. Write the ballot to a temp file with your file tool, shaped
+  `{ "votes": [ { "index": 0, "vote": "AGREE", "duplicateOf": null, "comment": "why" } ] }`
+  (`vote` is `AGREE`, `DISAGREE` or `DUPLICATE`), then send it:
 
   ```bash
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" ballot --session <sessionId> --vote <vote.id> --body - <<'EOF'
-  { "votes": [ { "index": 0, "vote": "AGREE", "duplicateOf": null, "comment": "why" } ] }
-  EOF
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/pyor-ai-review.mjs" ballot --session <sessionId> --vote <vote.id> --votes <tempfile>
   ```
 
   Then park a fresh `wait`. A one-line mention is enough: the vote is part of
